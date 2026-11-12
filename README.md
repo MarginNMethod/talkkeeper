@@ -32,7 +32,9 @@ user's responsibility; it will not determine whether recording is lawful.
 - **0 — Bootstrap:** Rust workspace, desktop shell, shared UI, tests, and CI.
 - **1 — Desktop core:** Capture, live transcripts, notes, summaries, templates,
   search, export, trash, multiple languages, and custom vocabulary.
-- **2 — Working with notes:** Cited chat, prompt recipes, people and companies,
+- **1.5 — Note conversations:** Copy full transcripts with formatting options, cited per-note chat,
+  proposed note revisions, redo with instructions, and version restore. Revisions require Apply.
+- **2 — Working with notes:** Multi-note and folder chat, prompt recipes, people and companies,
   shared-screen snapshots, and voice typing.
 - **3 — Connected workflows:** Calendars, briefs, follow-up drafts, confirmed chat
   actions, integrations, and a local MCP server.
