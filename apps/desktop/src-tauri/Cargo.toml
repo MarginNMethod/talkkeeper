@@ -11,5 +11,21 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 talkkeeper-core = { path = "../../../crates/core" }
 
+talkkeeper-llm = { path = "../../../crates/llm" }
+talkkeeper-templates = { path = "../../../crates/templates" }
+talkkeeper-transcribe = { path = "../../../crates/transcribe", features = ["cloud"] }
+talkkeeper-audio = { path = "../../../crates/audio" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true, features = ["sync", "time"] }
+futures-util = "0.3"
+rfd = "0.15"
+arboard = { version = "3", default-features = false }
+
 [features]
 custom-protocol = ["tauri/custom-protocol"]
+
+[dev-dependencies]
+async-trait = "0.1"
