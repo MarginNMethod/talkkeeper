@@ -10,7 +10,7 @@ Linux: capture, transcription, notes, AI summaries, chat across notes, reusable 
 people and companies, voice typing, opt-in shared-screen snapshots, and automatic local
 AI setup. Capture, hotkeys, and permissions have been verified on Linux only; macOS and
 Windows are covered by automated builds and tests but need hands-on testing. Downloadable installers
-for macOS, Windows, and Linux and calendar links are planned next (see the roadmap). There
+for macOS, Windows, and Linux are available through releases. Calendar links are supported (see the roadmap). There
 are no plans for mobile apps or app-store releases. Expect rough edges.
 
 ## Download
@@ -92,6 +92,18 @@ Settings offers Ask each time (default), Always on, Never, and snapshot retentio
 macOS requires Screen Recording permission; Windows and Linux X11 are supported.
 Wayland shows guidance to use X11. See [hand-testing steps](docs/testing.md).
 
+## Calendar links
+
+Add a private ICS/webcal link in **Settings → Calendars**, or import an `.ics` file.
+**Today & upcoming** shows cached meetings and opens notes with the event title and
+attendees. Links stay in the OS keychain; calendar data stays on this computer.
+Refresh runs at launch, every 15 minutes by default, and on demand. Failed refreshes
+keep the last good events. Reminder banners and automatic capture are separate,
+explicit opt-ins. Arrange recording consent before enabling automatic capture.
+Calendar context in AI enhancement defaults off; enabling it sends title, time and
+attendee names to the selected provider. Floating dates use the computer's time zone.
+Embedded VTIMEZONE observances and common Outlook Windows zone names are supported.
+
 ## Recording consent
 
 **Many jurisdictions require consent from all parties before recording. Users are
@@ -109,7 +121,7 @@ user's responsibility; it will not determine whether recording is lawful.
 - **2 — Working with notes (done):** Multi-note and folder chat, prompt recipes, people and
   companies, shared-screen snapshots, and voice typing.
 - **Next — Downloadable installers:** Release builds for macOS, Windows, and Linux on GitHub.
-- **3 — Calendar and integrations:** Calendar links (ICS), briefs, follow-up drafts, and a
+- **3 — Calendar and integrations:** Calendar links (ICS, implemented), briefs, follow-up drafts, and a
   local MCP server. No sign-in apps or app stores.
 - **Not planned for now:** mobile apps, app-store releases, and a sync server.
 

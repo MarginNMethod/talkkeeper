@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod calendar;
 mod chat;
 mod dictation;
 mod people;
@@ -163,6 +164,9 @@ async fn enhance_with_provider(
             .map_err(err)?
             .ok_or("Note not found")?;
 
+        let calendar = store.note_calendar_event(note_id).map_err(err)?;
+        let allow = preferences(&store)?["calendar_details"] == true;
+        let n = store.calendar_safe_note(n, allow).map_err(err)?;
         talkkeeper_templates::EnhanceInput {
             title: n.title,
             attendees: n.attendees.iter().map(|a| a.name.clone()).collect(),
@@ -178,7 +182,19 @@ async fn enhance_with_provider(
                     text: s.text.clone(),
                 })
                 .collect(),
-            context_snippets: vec![],
+            context_snippets: calendar
+                .filter(|_| allow)
+                .map(|e| {
+                    vec![talkkeeper_templates::calendar_context(
+                        &e.title,
+                        &e.instance_start.to_rfc3339(),
+                        &e.attendees
+                            .iter()
+                            .map(|a| a.name.clone())
+                            .collect::<Vec<_>>(),
+                    )]
+                })
+                .unwrap_or_default(),
         }
     };
 
@@ -337,6 +353,8 @@ fn validate_settings(payload: &Value) -> Result<()> {
             "snapshots_preference"
                 if ["Ask each time", "Always on", "Never"]
                     .contains(&value.as_str().unwrap_or("")) => {}
+            "calendar_details" | "calendar_reminders" | "calendar_auto_capture"
+                if value.is_boolean() => {}
             "snapshot_retention" if value.as_u64().is_some_and(|n| n <= 36500) => {}
             "retention" if value.as_u64().is_some_and(|n| n <= 36500) => {}
             "vocabulary"
@@ -345,7 +363,8 @@ fn validate_settings(payload: &Value) -> Result<()> {
                         && a.iter()
                             .all(|v| v.as_str().is_some_and(|s| !s.trim().is_empty()))
                 }) => {}
-            "base_url" | "stt_url" | "model" | "stt_model" | "language" | "notice"
+            "calendar_email" | "base_url" | "stt_url" | "model" | "stt_model" | "language"
+            | "notice"
                 if value.is_string() => {}
             _ => return Err(format!("Invalid or unknown setting: {key}")),
         }
@@ -358,6 +377,9 @@ fn data_inner(state: &AppState, action: String, payload: Value) -> Result<Value>
     let id = || Uuid::parse_str(payload["id"].as_str().unwrap_or("")).map_err(err);
     if action == "snapshots" || action.starts_with("snapshot_") {
         return snapshots::data(&mut store, &action, payload);
+    }
+    if action.starts_with("calendar_") {
+        return calendar::data(state, &mut store, &action, payload);
     }
     match action.as_str() {
         "people" => Ok(json!(store.list_people().map_err(err)?)),
@@ -596,9 +618,11 @@ fn main() {
             dictation::initialize(app.handle());
             app.manage(setup::SetupState::default());
             setup::resume(app.handle().clone());
+            calendar::initialize(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            calendar::calendar_data,
             data,
             dictation::dictation_data,
             dictation::dictation_control,

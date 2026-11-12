@@ -1,3 +1,4 @@
+import { Agenda, CalendarLink, CalendarReminder, CalendarAutoCapture } from "./Calendar";
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -42,6 +43,7 @@ export function App() {
   const [directory, setDirectory] = useState<"people" | "companies" | null>(
     null,
   );
+  const [agenda, setAgenda] = useState(false);
   const [personId, setPersonId] = useState<string | undefined>();
   const [workspaceChat, setWorkspaceChat] = useState(false);
   const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
@@ -160,6 +162,7 @@ export function App() {
   }
 
   async function select(n: Note) {
+    setAgenda(false);
     await flush();
     setDirectory(null);
     setWorkspaceChat(false);
@@ -215,15 +218,19 @@ export function App() {
   }
   return (
     <>
+      {status !== "stopped" && <aside role="status" aria-label="Capture indicator">Capture {status}<button onClick={() => void invoke("stop_capture").catch(fail)}>Stop capture</button></aside>}
+      <CalendarAutoCapture active={status !== "stopped"} onOpen={async n => { await select(n); await refresh(); }} onError={fail} />
+      <CalendarReminder onOpen={n => void select(n).then(refresh).catch(fail)} onError={fail} />
       <SnapshotControls noteId={captureNote} status={status} onError={fail} />
     <main>
       <aside className="sidebar">
         <h1>TalkKeeper</h1>
+        <button onClick={() => void flush().then(() => { setAgenda(true); setWorkspaceChat(false); setDirectory(null); }).catch(fail)}>Today &amp; upcoming</button>
         <button
           disabled={setupNeeded !== false}
           onClick={() =>
             void flush()
-              .then(() => setWorkspaceChat(true))
+              .then(() => { setAgenda(false); setWorkspaceChat(true); })
               .catch(fail)
           }
         >
@@ -245,6 +252,7 @@ export function App() {
           onClick={() => {
             setDirectory(null);
             setTrash(false);
+            setAgenda(false);
           }}
         >
           Notes
@@ -257,6 +265,7 @@ export function App() {
                 .then(() => {
                   setPersonId(undefined);
                   setDirectory(kind);
+                  setAgenda(false);
                 })
                 .catch(fail)
             }
@@ -264,7 +273,7 @@ export function App() {
             {kind === "people" ? "People" : "Companies"}
           </button>
         ))}
-        <button onClick={() => { setDirectory(null); setTrash(true); }}>Trash</button>
+        <button onClick={() => { setAgenda(false); setDirectory(null); setTrash(true); }}>Trash</button>
         <label>
           Folder
           <select value={folder} onChange={(e) => setFolder(e.target.value)}>
@@ -389,6 +398,8 @@ export function App() {
               }
             />
           )
+        ) : agenda ? (
+          <Agenda onOpen={n => void select(n).then(refresh).catch(fail)} onError={fail} />
         ) : workspaceChat ? (
           <WorkspaceChat
             selected={selectedNotes}
@@ -430,6 +441,7 @@ export function App() {
           />
         ) : note ? (
           <>
+            <CalendarLink note={note} onError={fail} onOpen={n => void select(n).catch(fail)} />
             <header>
               <input
                 className="title"

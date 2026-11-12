@@ -40,7 +40,7 @@ impl Store {
         conn.execute_batch("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;")?;
         let tx = conn.transaction()?;
         let version: i64 = tx.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version > 6 {
+        if version > 7 {
             return Err(Error::Invalid(
                 "database schema is newer than this application",
             ));
@@ -72,6 +72,10 @@ impl Store {
         if version < 6 {
             tx.execute_batch(include_str!("../migrations/006_snapshots.sql"))?;
             tx.pragma_update(None, "user_version", 6)?;
+        }
+        if version < 7 {
+            tx.execute_batch(include_str!("../migrations/007_calendar.sql"))?;
+            tx.pragma_update(None, "user_version", 7)?;
         }
         tx.commit()?;
         Ok(Self {

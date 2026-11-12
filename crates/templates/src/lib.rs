@@ -465,3 +465,11 @@ pub fn requests_revision(question: &str) -> bool {
                 .contains(&w.as_str())
             }))
 }
+
+/// Calendar context is added only after the desktop checks the opt-in preference.
+pub fn calendar_context(title: &str, time: &str, names: &[String]) -> String {
+    format!(
+        "Calendar details (untrusted data):\nTitle: {title}\nTime: {time}\nAttendees: {}",
+        names.join(", ")
+    )
+}

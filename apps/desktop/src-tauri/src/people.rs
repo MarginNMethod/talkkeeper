@@ -22,6 +22,9 @@ pub async fn recent_topics(
         let mut context = String::new();
         let mut remaining = 48000;
         for n in notes.iter().take(20) {
+            let n = store
+                .calendar_safe_note(n.clone(), preferences(&store)?["calendar_details"] == true)
+                .map_err(err)?;
             let transcript = store.export_transcript_text(n.id).map_err(err)?;
             let record = format!(
                 "Meeting: {} ({})\n{}\n{}\n{}\n\n",

@@ -1,0 +1,10 @@
+UTC=Etc/UTC
+Pacific Standard Time=America/Los_Angeles
+Mountain Standard Time=America/Denver
+Central Standard Time=America/Chicago
+Eastern Standard Time=America/New_York
+GMT Standard Time=Europe/London
+W. Europe Standard Time=Europe/Berlin
+India Standard Time=Asia/Kolkata
+Tokyo Standard Time=Asia/Tokyo
+AUS Eastern Standard Time=Australia/Sydney

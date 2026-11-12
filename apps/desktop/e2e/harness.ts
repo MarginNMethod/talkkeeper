@@ -1,3 +1,4 @@
+let calendarAdded = false;
 import { mockIPC } from "@tauri-apps/api/mocks";
 let chat: Record<string, unknown>[] = [];
 let versions: Record<string, unknown>[] = [];
@@ -108,6 +109,10 @@ mockIPC(async (command, args) => {
     setupDone = true;
     return;
   }
+  if (command === "calendar_data") {
+    if (a.action === "add") calendarAdded = true;
+    return { count: 1 };
+  }
   if (command === "start_capture") { captureNote = String(a.noteId); emit("capture://state", { note_id: captureNote, state: "recording" }); return; }
   if (command === "snapshot_ai_status") return { supports_images: false, cloud: false, confirmed: true };
   if (command === "snapshot_control") {
@@ -197,7 +202,17 @@ mockIPC(async (command, args) => {
   }
   if (command === "data") {
     const p = a.payload as Record<string, unknown>;
+    const calendarEvent = { source_id: "source", uid: "meeting", instance_start: new Date().toISOString(), instance_end: new Date(Date.now()+3600000).toISOString(), all_day: false, title: "Calendar planning", attendees: [{ name: "Alex", email: "alex@example.test" }], meeting_url: null };
     switch (a.action) {
+      case "calendar_sources": return [];
+      case "calendar_events": return calendarAdded ? structuredClone([{event:calendarEvent,note_id:null}]) : [];
+      case "calendar_note": return notes.find(n => n.id === p.id)?.title === "Calendar planning" ? structuredClone(calendarEvent) : null;
+      case "calendar_start": {
+        const existing = notes.find(n=>n.title === "Calendar planning");
+        if (existing) return structuredClone(existing);
+        const note = {id:`note-${notes.length+1}`, title:"Calendar planning", created_at:new Date().toISOString(),updated_at:new Date().toISOString(),notes_doc:null,notes_markdown:"",summary_markdown:null,template_id:null,folder_id:null,attendees:calendarEvent.attendees,deleted_at:null};
+        notes.push(structuredClone(note));return structuredClone(note);
+      }
       case "snapshots": return structuredClone(snapshots.filter((s) => s.note_id === p.id));
       case "snapshot_image": return "data:image/jpeg;base64,/9j/2Q==";
       case "snapshot_exclude": snapshots = snapshots.map((s) => s.id === p.snapshot ? { ...s, use_in_summary: !p.excluded } : s); return;

@@ -1,0 +1,6 @@
+zoom.us
+meet.google.com
+teams.microsoft.com
+teams.live.com
+webex.com
+whereby.com

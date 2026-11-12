@@ -128,3 +128,27 @@ Migration 005 belongs to voice typing in its separate worktree. This branch adds
 006 directly after 004 and accepts databases already marked 005. When integrating
 both branches, retain the 005 migration block before 006 and keep the maximum
 schema version at 006. No placeholder 005 file is introduced here.
+
+## Calendar links
+
+Run `cargo test -p talkkeeper-calendar`, `cargo test -p talkkeeper-core --test calendar`,
+and desktop Vitest. The parser fixtures are hand-written synthetic calendars. Tests
+cover recurrence exceptions, DST, Windows zones, all-day/floating/UTC dates, folding,
+escapes, attendees, bounds, HTTP errors/ETag/redirect/size/timeout, schema-6 upgrade,
+note/directory links, source removal, and explicit-clock refresh scheduling. A native
+sync test uses the in-memory secret store and verifies last-good-copy preservation.
+Run the complete Playwright suite three consecutive times with
+`PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium pnpm --dir apps/desktop run e2e`.
+The calendar scenario adds a link, opens the agenda, starts a note and checks its
+title, attendees and link; mock results are fresh copies.
+
+For hand testing on each platform: add a private calendar, test it, save it, confirm
+that the link field clears, restart, disconnect the network and open cached events.
+Refresh a changed recurrence and check moved/cancelled instances. Disable/re-enable
+and remove sources; linked notes and people must survive. Test imported files, an
+HTTP warning, bad links, cloud-context disclosure and light/dark keyboard navigation.
+Enable reminders and check the five-minute/start banners while the app is open.
+Only after obtaining consent, enable automatic capture and verify the persistent
+indicator and Stop action when the meeting begins. Neither option is on by default.
+Embedded custom VTIMEZONE DST transitions have a synthetic regression fixture.
+Native OS notifications remain unsupported; reminders appear within the app.
