@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import type { Segment } from "./api";
+import { speakerName } from "./CopyTranscript";
 export function Transcript({
   segments,
   onDelete,
@@ -7,11 +9,19 @@ export function Transcript({
 }: {
   segments: Segment[];
   onDelete: (ids: string[]) => void;
-  onCopy: () => void;
+  onCopy: ReactNode;
 }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const bottom = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const showCitation = () => {
+      if (location.hash.startsWith("#segment-")) setQuery("");
+    };
+    window.addEventListener("hashchange", showCitation);
+    return () => window.removeEventListener("hashchange", showCitation);
+  }, []);
+
   useEffect(() => {
     bottom.current?.scrollIntoView?.({ behavior: "smooth" });
   }, [segments]);
@@ -24,7 +34,7 @@ export function Transcript({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
-      <button onClick={onCopy}>Copy all</button>
+      {onCopy}
       <button
         disabled={!selected.length}
         onClick={() => {
@@ -52,9 +62,7 @@ export function Transcript({
                     )
                   }
                 />
-                <strong>
-                  {typeof s.speaker === "string" ? s.speaker : "Speaker"}
-                </strong>{" "}
+                <strong>{speakerName(s.speaker)}</strong>{" "}
                 <time>
                   {Math.floor(s.start_ms / 60000)}:
                   {String(Math.floor(s.start_ms / 1000) % 60).padStart(2, "0")}

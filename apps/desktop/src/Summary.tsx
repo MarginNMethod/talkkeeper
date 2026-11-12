@@ -1,3 +1,4 @@
+import { speakerName } from "./CopyTranscript";
 import type { Segment } from "./api";
 export function Summary({
   markdown,
@@ -21,7 +22,25 @@ export function Summary({
           }
           return (
             <section className="summary-section" key={index}>
-              <p>{section}</p>
+              <p>
+                {section.split(/(\[#\d+(?:-\d+)?\])/g).map((part, i) => {
+                  const match = /^\[#(\d+)/.exec(part);
+                  const source = match
+                    ? segments.find((s) => s.seq === Number(match[1]))
+                    : undefined;
+                  return source ? (
+                    <a
+                      key={i}
+                      href={`#segment-${source.seq}`}
+                      title={source.text}
+                    >
+                      {part}
+                    </a>
+                  ) : (
+                    part
+                  );
+                })}
+              </p>
               {[...references].map((seq) => {
                 const segment = segments.find((s) => s.seq === seq);
                 return (
@@ -34,7 +53,7 @@ export function Summary({
                     {segment ? (
                       <p>
                         <a href={`#segment-${seq}`}>
-                          {segment.speaker} ·{" "}
+                          {speakerName(segment.speaker)} ·{" "}
                           {Math.floor(segment.start_ms / 1000)}s
                         </a>
                         : {segment.text}
