@@ -191,3 +191,95 @@ fn credential_lifecycle() {
     store.delete("key").unwrap();
     assert_eq!(store.get("key").unwrap(), None);
 }
+
+#[tokio::test]
+async fn vision_capability_uses_provider_metadata() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/api/show"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"capabilities":["completion","vision"]})),
+        )
+        .mount(&server)
+        .await;
+    let provider = build_provider(
+        ProviderConfig::Ollama {
+            base_url: server.uri(),
+        },
+        &InMemorySecretStore::default(),
+    )
+    .unwrap();
+    assert!(provider.supports_images("user-selected").await.unwrap());
+    assert!(!talkkeeper_llm::image_capability(&json!({"id":"unknown"})));
+    assert!(talkkeeper_llm::image_capability(
+        &json!({"input_modalities":["text","image"]})
+    ));
+}
+
+#[tokio::test]
+async fn jpeg_payloads_follow_each_provider_protocol_and_scope() {
+    for kind in 0..3 {
+        let server = MockServer::start().await;
+        let secrets = InMemorySecretStore::default();
+        secrets.set("test", "key").unwrap();
+        let (config, path, expected, response) = match kind {
+            0 => (
+                ProviderConfig::Ollama {
+                    base_url: server.uri(),
+                },
+                "/api/chat",
+                json!({"messages":[{"role":"system","content":"Be precise"},{"role":"user","content":"Hello","images":["jpeg-data"]}]}),
+                "{\"message\":{\"content\":\"Seen\"}}\n",
+            ),
+            1 => (
+                ProviderConfig::OpenAI {
+                    base_url: server.uri(),
+                    secret_name: "test".into(),
+                },
+                "/v1/chat/completions",
+                json!({"messages":[{"role":"system","content":"Be precise"},{"role":"user","content":[{"type":"text","text":"Hello"},{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,jpeg-data"}}]}]}),
+                "data: {\"choices\":[{\"delta\":{\"content\":\"Seen\"}}]}\n\n",
+            ),
+            _ => (
+                ProviderConfig::Anthropic {
+                    base_url: server.uri(),
+                    secret_name: "test".into(),
+                },
+                "/v1/messages",
+                json!({"messages":[{"role":"user","content":[{"type":"text","text":"Hello"},{"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":"jpeg-data"}}]}]}),
+                "data: {\"delta\":{\"text\":\"Seen\"}}\n\n",
+            ),
+        };
+        Mock::given(method("POST"))
+            .and(wiremock::matchers::path(path))
+            .and(body_partial_json(expected))
+            .respond_with(ResponseTemplate::new(200).set_body_string(response))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let provider = build_provider(config, &secrets).unwrap();
+        assert_eq!(provider.image_transfer_scope().is_none(), kind == 0);
+        let mut stream = provider
+            .stream_images(request(), vec!["jpeg-data".into()])
+            .await
+            .unwrap();
+        assert_eq!(stream.next().await.unwrap().unwrap(), "Seen");
+    }
+    let remote = build_provider(
+        ProviderConfig::Ollama {
+            base_url: "https://example.org".into(),
+        },
+        &InMemorySecretStore::default(),
+    )
+    .unwrap();
+    assert!(remote.image_transfer_scope().is_some());
+    let deceptive = build_provider(
+        ProviderConfig::Ollama {
+            base_url: "http://localhost:11434@example.org".into(),
+        },
+        &InMemorySecretStore::default(),
+    )
+    .unwrap();
+    assert!(deceptive.image_transfer_scope().is_some());
+}

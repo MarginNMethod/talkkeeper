@@ -92,6 +92,11 @@ async fn prepare_capture(
         note.ended_at = None;
         db.update_note(&note).map_err(err)?;
     }
+    state
+        .snapshots
+        .lock()
+        .map_err(err)?
+        .recording(note_id, true);
     app.emit(
         "capture://state",
         json!({"note_id": note_id, "state": "recording"}),
@@ -179,6 +184,7 @@ async fn run_capture(
                         Some("resume") => { capture.resume(); paused = false; monitor = talkkeeper_transcribe::vad::SilenceMonitor::new(5, clock.elapsed().as_millis() as u64); "recording" },
                         _ => break,
                     };
+                    app.state::<AppState>().snapshots.lock().map_err(err)?.recording(note_id, !paused);
                     app.emit("capture://state", json!({"note_id": note_id, "state": status})).map_err(err)?;
                 }
                 error = capture.errors.recv() => {
@@ -200,6 +206,8 @@ async fn run_capture(
                     }).await.map_err(err)?;
                 }
                 _ = tick.tick() => {
+                    let snapshot_app = app.clone();
+                    tauri::async_runtime::spawn_blocking(move || snapshots::tick(&snapshot_app));
                     if !paused && monitor.observe(clock.elapsed().as_millis() as u64, false).is_some() {
                         app.emit("capture://auto-stop-suggested", json!({"note_id": note_id})).map_err(err)?;
                     }
@@ -208,6 +216,9 @@ async fn run_capture(
         }
         Ok(())
     }.await;
+    if let Ok(mut session) = app.state::<AppState>().snapshots.lock() {
+        session.stop();
+    }
     capture.stop();
     let finish = stt.finish().await.map_err(err);
     let drain = output.await.map_err(err).and_then(|r| r);

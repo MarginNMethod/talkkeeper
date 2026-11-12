@@ -23,10 +23,15 @@ pub enum Error {
 
 pub struct Store {
     pub(crate) conn: Connection,
+    pub(crate) snapshot_directory: Option<std::path::PathBuf>,
 }
 impl Store {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
-        Self::initialize(Connection::open(path)?)
+        let path = path.as_ref();
+        let mut store = Self::initialize(Connection::open(path)?)?;
+        store.snapshot_directory = Some(path.parent().unwrap_or(Path::new(".")).join("snapshots"));
+        store.cleanup_snapshot_files()?;
+        Ok(store)
     }
     pub fn open_in_memory() -> Result<Self> {
         Self::initialize(Connection::open_in_memory()?)
@@ -35,7 +40,7 @@ impl Store {
         conn.execute_batch("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;")?;
         let tx = conn.transaction()?;
         let version: i64 = tx.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version > 5 {
+        if version > 6 {
             return Err(Error::Invalid(
                 "database schema is newer than this application",
             ));
@@ -64,8 +69,15 @@ impl Store {
             tx.execute_batch(include_str!("../migrations/005_dictation.sql"))?;
             tx.pragma_update(None, "user_version", 5)?;
         }
+        if version < 6 {
+            tx.execute_batch(include_str!("../migrations/006_snapshots.sql"))?;
+            tx.pragma_update(None, "user_version", 6)?;
+        }
         tx.commit()?;
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            snapshot_directory: None,
+        })
     }
     fn write<T>(&mut self, f: impl FnOnce(&Transaction<'_>) -> Result<T>) -> Result<T> {
         let tx = self.conn.transaction()?;
@@ -250,7 +262,8 @@ impl Store {
                 return Err(Error::NotFound);
             }
             Ok(())
-        })
+        })?;
+        self.cleanup_snapshot_files()
     }
     pub fn purge_trash_older_than(&mut self, age: Duration) -> Result<usize> {
         let cutoff = Utc::now()
@@ -258,7 +271,7 @@ impl Store {
                 ChronoDuration::from_std(age).map_err(|_| Error::Invalid("duration too large"))?,
             )
             .ok_or(Error::Invalid("duration too large"))?;
-        self.write(|tx| {
+        let count = self.write(|tx| {
             let mut count = 0;
             for n in all_notes(tx)? {
                 if n.deleted_at.is_some_and(|t| t < cutoff) {
@@ -266,7 +279,9 @@ impl Store {
                 }
             }
             Ok(count)
-        })
+        })?;
+        self.cleanup_snapshot_files()?;
+        Ok(count)
     }
     pub fn append_transcript_segments(&mut self, segments: &[TranscriptSegment]) -> Result<()> {
         self.write(|tx| {

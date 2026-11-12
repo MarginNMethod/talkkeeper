@@ -27,6 +27,9 @@ arboard = { version = "3", default-features = false, features = ["image-data"] }
 
 tauri-plugin-global-shortcut = "2"
 enigo = { version = "0.6", default-features = false, features = ["x11rb"] }
+xcap = "=0.0.14"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+base64 = "0.22"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
@@ -34,4 +37,8 @@ custom-protocol = ["tauri/custom-protocol"]
 macos-system-audio = ["talkkeeper-audio/macos-screencapture"]
 
 [dev-dependencies]
+tempfile = "3"
 async-trait = "0.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+xcb = "1.4"

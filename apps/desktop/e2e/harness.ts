@@ -23,6 +23,13 @@ let setupAttempts = 0;
 let dictationConfig: Record<string, unknown> | null = null;
 let dictations: Record<string, unknown>[] = [];
 const listeners: Record<string, number[]> = {};
+let snapshots: Record<string, unknown>[] = [];
+let screenEnabled = false;
+let captureNote = "";
+function emit(event: string, payload: unknown) {
+  for (const handler of listeners[event] ?? [])
+    (window as unknown as { __TAURI_INTERNALS__: { runCallback: (id: number, arg: unknown) => void } }).__TAURI_INTERNALS__.runCallback(handler, { event, id: 1, payload: structuredClone(payload) });
+}
 mockIPC(async (command, args) => {
   const a = args as Record<string, unknown>;
   if (command === "plugin:event|listen") {
@@ -101,6 +108,20 @@ mockIPC(async (command, args) => {
     setupDone = true;
     return;
   }
+  if (command === "start_capture") { captureNote = String(a.noteId); emit("capture://state", { note_id: captureNote, state: "recording" }); return; }
+  if (command === "snapshot_ai_status") return { supports_images: false, cloud: false, confirmed: true };
+  if (command === "snapshot_control") {
+    if (a.action === "status") return { enabled: screenEnabled };
+    if (a.action === "sources") return [{ id: "window:2", name: "Slides window" }];
+    if (a.action === "enable") {
+      if (!a.confirmed) throw new Error("Confirm first");
+      screenEnabled = true;
+      snapshots = [{ id: "snapshot-1", note_id: captureNote, captured_at: new Date().toISOString(), elapsed_ms: 10000, source: "Slides window", use_in_summary: true }];
+      emit("snapshots://changed", null); return true;
+    }
+    if (a.action === "disable") { screenEnabled = false; return; }
+    return false;
+  }
   if (command === "chat_note") {
     const message = {
       id: "chat-1",
@@ -177,6 +198,11 @@ mockIPC(async (command, args) => {
   if (command === "data") {
     const p = a.payload as Record<string, unknown>;
     switch (a.action) {
+      case "snapshots": return structuredClone(snapshots.filter((s) => s.note_id === p.id));
+      case "snapshot_image": return "data:image/jpeg;base64,/9j/2Q==";
+      case "snapshot_exclude": snapshots = snapshots.map((s) => s.id === p.snapshot ? { ...s, use_in_summary: !p.excluded } : s); return;
+      case "snapshot_delete": snapshots = snapshots.filter((s) => s.id !== p.snapshot); emit("snapshots://changed", null); return;
+      case "snapshot_delete_all": snapshots = []; emit("snapshots://changed", null); return;
       case "people":
         return structuredClone(
           notes
@@ -230,9 +256,9 @@ mockIPC(async (command, args) => {
         return structuredClone(n);
       }
       case "chat_history":
-        return chat;
+        return structuredClone(chat);
       case "versions":
-        return versions;
+        return structuredClone(versions);
       case "copy_text":
         return null;
       case "apply_revision":

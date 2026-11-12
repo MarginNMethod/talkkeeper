@@ -6,7 +6,7 @@ meetings as a bot. Write rough notes alongside the transcript, then turn them in
 an AI-enhanced summary.
 
 **Status: desktop core with automatic local setup.** Capture, transcription, notes,
-summaries, workspace chat, reusable recipes, and local storage are available; later roadmap features remain planned.
+summaries, workspace chat, reusable recipes, shared-screen snapshots, and local storage are available; later roadmap features remain planned.
 
 ## First run
 
@@ -57,6 +57,17 @@ application-specific clipboard formats cannot be restored. On
 Wayland or when paste permission is unavailable, text stays on the clipboard with
 guidance in the main window. See [manual permission checks](docs/testing.md).
 
+## Screen snapshots
+
+During a meeting, choose **Capture shared screen**, confirm the privacy guidance,
+and select a window or display. A visible badge shows the count and offers Stop.
+Changed frames are saved every ten seconds, up to 60 JPEGs per note (1 MiB each,
+1600-pixel long edge). Meeting pause and stop also halt screen capture. The gallery
+links images to transcript times and supports exclusion from AI notes and deletion.
+Settings offers Ask each time (default), Always on, Never, and snapshot retention.
+macOS requires Screen Recording permission; Windows and Linux X11 are supported.
+Wayland shows guidance to use X11. See [hand-testing steps](docs/testing.md).
+
 ## Recording consent
 
 **Many jurisdictions require consent from all parties before recording. Users are
@@ -90,6 +101,15 @@ with a managed Ollama engine. Recommendations live in the editable
 [`model-catalog.json`](crates/setup/model-catalog.json). Cloud STT and AI providers
 are optional and use your own keys; relevant content goes to your selected provider.
 Secrets use the OS keychain, never SQLite or plain-text configuration.
+
+Screen snapshots are off by default and can expose private windows, documents or
+other people's information. Prefer one presentation window and obtain consent.
+TalkKeeper windows are excluded, and its visible rectangles are masked in display
+captures. Images remain in application data unless your selected AI model advertises
+image support; cloud image transfer additionally requires explicit confirmation for
+that provider and endpoint. Unknown and text-only models leave snapshots attached
+without using them. Trash/restore preserves images; permanent deletion removes them.
+Snapshot retention defaults to 30 days and is applied at launch.
 
 After setup consent, downloads contact ollama.com, registry.ollama.ai and its blob
 CDN hosts (including *.r2.cloudflarestorage.com), github.com release assets via

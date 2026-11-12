@@ -15,3 +15,5 @@ pub use workspace::*;
 
 mod dictation;
 pub use dictation::*;
+mod snapshots;
+pub use snapshots::*;

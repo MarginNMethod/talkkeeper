@@ -298,3 +298,7 @@ meter {
 .dictation-cue { color: #36aa80; animation: dictation-cue .5s ease-out; }
 @keyframes dictation-cue { from { opacity: .2; transform: scale(.5); } to { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .dictation-cue { animation: none; } }
+.snapshot-controls { position: sticky; top: 0; z-index: 20; background: var(--panel); padding: .5rem; border-bottom: 1px solid #888; }
+.snapshot-gallery { display: flex; flex-wrap: wrap; gap: 1rem; }
+.snapshot-gallery figure { margin: 0; max-width: 320px; }
+.snapshot-thumbnail { width: 100%; height: auto; }

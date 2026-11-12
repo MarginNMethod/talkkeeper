@@ -205,6 +205,14 @@ export function Settings({
         />
       </label>
       <label>
+        Screen snapshots
+        <select value={prefs.snapshots_preference ?? "Ask each time"} onChange={(e) => field("snapshots_preference", e.target.value)}>
+          {["Ask each time", "Always on", "Never"].map((value) => <option key={value}>{value}</option>)}
+        </select>
+      </label>
+      <p>Always on uses the frontmost eligible window on the main display after your first confirmation. Screen images may contain private information.</p>
+      <label>Snapshot retention days<input type="number" min="0" max="36500" value={prefs.snapshot_retention ?? 30} onChange={(e) => field("snapshot_retention", Number(e.target.value))} /></label>
+      <label>
         Transcript retention days
         <input
           type="number"
