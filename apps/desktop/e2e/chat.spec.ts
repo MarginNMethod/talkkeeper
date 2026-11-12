@@ -27,7 +27,7 @@ test("copy transcript, propose a shorter note, apply and undo", async ({
     .first()
     .click();
   await expect(
-    page.getByRole("status").filter({ hasText: "Copied 5 words" }),
+    page.getByRole("status").filter({ hasText: "Copied 7 words" }),
   ).toBeVisible();
   const chat = page.getByRole("region", { name: "Chat with this note" });
   await chat

@@ -7,3 +7,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub fn component_name() -> &'static str {
     "core"
 }
+
+mod directory;
+pub use directory::{Company, Person};
+mod workspace;
+pub use workspace::*;

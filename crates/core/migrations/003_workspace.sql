@@ -1,0 +1,3 @@
+CREATE TABLE workspace_chats (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE recipes (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE VIRTUAL TABLE workspace_search USING fts5(note_id UNINDEXED, seq UNINDEXED, start_ms UNINDEXED, title UNINDEXED, body);

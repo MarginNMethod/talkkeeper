@@ -4,6 +4,7 @@ export const data = <T>(action: string, payload: unknown = {}) =>
 export interface Note {
   id: string;
   title: string;
+  started_at?: string | null;
   created_at: string;
   updated_at: string;
   notes_doc: unknown;

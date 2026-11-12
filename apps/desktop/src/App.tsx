@@ -13,6 +13,8 @@ import { Transcript } from "./Transcript";
 import { Settings } from "./Settings";
 import { Templates } from "./Templates";
 import { Setup } from "./Setup";
+import { People, Attendees, type Person } from "./People";
+import { WorkspaceChat } from "./WorkspaceChat";
 import { Chat } from "./Chat";
 import { CopyTranscript } from "./CopyTranscript";
 import { Summary } from "./Summary";
@@ -36,6 +38,14 @@ export function App() {
     [folders, setFolders] = useState<{ id: string; name: string }[]>([]),
     [folder, setFolder] = useState(""),
     [progress, setProgress] = useState("");
+  const [directory, setDirectory] = useState<"people" | "companies" | null>(
+    null,
+  );
+  const [personId, setPersonId] = useState<string | undefined>();
+  const [workspaceChat, setWorkspaceChat] = useState(false);
+  const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
+  const [citationSeq, setCitationSeq] = useState<number | null>(null);
+  useEffect(() => { if (citationSeq !== null && !workspaceChat) document.getElementById(`segment-${citationSeq}`)?.scrollIntoView?.({ behavior: "smooth" }); }, [segments, workspaceChat, citationSeq]);
   const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null);
   useEffect(() => {
     void invoke<{ completed: boolean; custom: boolean }>("setup_status")
@@ -150,6 +160,8 @@ export function App() {
 
   async function select(n: Note) {
     await flush();
+    setDirectory(null);
+    setWorkspaceChat(false);
     setNote(n);
     setTemplate(n.template_id ?? "auto");
     setSegments(await data("segments", { id: n.id }));
@@ -206,6 +218,16 @@ export function App() {
         <h1>TalkKeeper</h1>
         <button
           disabled={setupNeeded !== false}
+          onClick={() =>
+            void flush()
+              .then(() => setWorkspaceChat(true))
+              .catch(fail)
+          }
+        >
+          Ask your notes
+        </button>
+        <button
+          disabled={setupNeeded !== false}
           onClick={() => void create().catch(fail)}
         >
           New note
@@ -216,8 +238,30 @@ export function App() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <button onClick={() => setTrash(false)}>Notes</button>
-        <button onClick={() => setTrash(true)}>Trash</button>
+        <button
+          onClick={() => {
+            setDirectory(null);
+            setTrash(false);
+          }}
+        >
+          Notes
+        </button>
+        {(["people", "companies"] as const).map((kind) => (
+          <button
+            key={kind}
+            onClick={() =>
+              void flush()
+                .then(() => {
+                  setPersonId(undefined);
+                  setDirectory(kind);
+                })
+                .catch(fail)
+            }
+          >
+            {kind === "people" ? "People" : "Companies"}
+          </button>
+        ))}
+        <button onClick={() => { setDirectory(null); setTrash(true); }}>Trash</button>
         <label>
           Folder
           <select value={folder} onChange={(e) => setFolder(e.target.value)}>
@@ -281,6 +325,7 @@ export function App() {
             .filter((n) => !folder || n.folder_id === folder)
             .map((n, i, a) => (
               <div key={n.id}>
+                {!trash && <input type="checkbox" aria-label={`Select note ${n.title}`} checked={selectedNotes.includes(n.id)} onChange={(e) => setSelectedNotes((ids) => e.target.checked ? [...ids, n.id] : ids.filter((id) => id !== n.id))} />}
                 {(i === 0 ||
                   n.created_at.slice(0, 10) !==
                     a[i - 1].created_at.slice(0, 10)) && (
@@ -341,6 +386,45 @@ export function App() {
               }
             />
           )
+        ) : workspaceChat ? (
+          <WorkspaceChat
+            selected={selectedNotes}
+            folders={folders}
+            onOpen={(id, seq) => {
+              setCitationSeq(seq);
+              void data<Note>("get", { id })
+                .then((n) => {
+                  if (!n || n.deleted_at)
+                    throw new Error("Source note is unavailable");
+                  return select(n);
+                })
+                .catch(fail);
+            }}
+            onSaved={(n) => {
+              void select(n).then(refresh).catch(fail);
+            }}
+          />
+        ) : directory ? (
+          <People
+            key={directory + (personId ?? "")}
+            kind={directory}
+            initialPerson={personId}
+            onError={fail}
+            onSelect={(n) => void select(n).catch(fail)}
+            onStart={(p: Person) =>
+              void (async () => {
+                await flush();
+                const n = await data<Note>("start_note", {});
+                const next = {
+                  ...n,
+                  attendees: [{ name: p.name, email: p.email }],
+                };
+                await data("update", next);
+                await select(next);
+                await refresh();
+              })().catch(fail)
+            }
+          />
         ) : note ? (
           <>
             <header>
@@ -400,19 +484,28 @@ export function App() {
                 </button>
               )}
             </header>
-            <label>
-              Attendees
-              <input
-                value={note.attendees.map((a) => a.name).join(", ")}
-                onChange={(e) =>
-                  update({
-                    attendees: e.target.value
-                      .split(",")
-                      .map((name) => ({ name: name.trim(), email: "" })),
+            <Attendees
+              key={note.id}
+              value={note.attendees}
+              onChange={(attendees) => update({ attendees })}
+              onOpen={(id) =>
+                void flush()
+                  .then(async () => {
+                    const people = await data<Person[]>("people");
+                    const p = people.find(
+                      (p) =>
+                        p.id === id ||
+                        p.email.toLowerCase() === id.toLowerCase() ||
+                        p.name.toLowerCase() === id.toLowerCase(),
+                    );
+                    if (p) {
+                      setPersonId(p.id);
+                      setDirectory("people");
+                    }
                   })
-                }
-              />
-            </label>
+                  .catch(fail)
+              }
+            />
             <label>
               File in
               <select
