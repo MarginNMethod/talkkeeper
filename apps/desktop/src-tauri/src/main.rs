@@ -2,6 +2,7 @@
 mod calendar;
 mod chat;
 mod dictation;
+mod mcp;
 mod people;
 mod session;
 mod setup;
@@ -623,6 +624,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             calendar::calendar_data,
+            mcp::mcp_data,
             data,
             dictation::dictation_data,
             dictation::dictation_control,

@@ -8,6 +8,7 @@ license.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+talkkeeper-mcp = { path = "../../../crates/mcp" }
 tauri = { version = "2", features = [] }
 talkkeeper-setup = { path = "../../../crates/setup" }
 talkkeeper-calendar = { path = "../../../crates/calendar" }

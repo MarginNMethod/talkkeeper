@@ -104,6 +104,15 @@ Calendar context in AI enhancement defaults off; enabling it sends title, time a
 attendee names to the selected provider. Floating dates use the computer's time zone.
 Embedded VTIMEZONE observances and common Outlook Windows zone names are supported.
 
+## Connect other AI tools
+
+An optional [local MCP server](docs/mcp.md) lets stdio clients search and read
+notes. Enable **Settings → Connect other AI tools**; notes, transcripts and calendar
+sharing each default off. Clients launch the separate release binary themselves.
+Images, trash and credentials are excluded. Content a client reads may go to its
+AI provider; enable only clients you trust. Settings includes configuration snippets,
+a readiness check and content-free recent access.
+
 ## Recording consent
 
 **Many jurisdictions require consent from all parties before recording. Users are
@@ -122,7 +131,7 @@ user's responsibility; it will not determine whether recording is lawful.
   companies, shared-screen snapshots, and voice typing.
 - **Next — Downloadable installers:** Release builds for macOS, Windows, and Linux on GitHub.
 - **3 — Calendar and integrations:** Calendar links (ICS, implemented), briefs, follow-up drafts, and a
-  local MCP server. No sign-in apps or app stores.
+  local MCP server (implemented). No sign-in apps or app stores.
 - **Not planned for now:** mobile apps, app-store releases, and a sync server.
 
 See [the roadmap](docs/roadmap.md) for scope and [architecture](docs/architecture.md)

@@ -58,7 +58,7 @@ for macOS, Windows, and Linux. It is not published to any app store. A release
 workflow will build the installers from a version tag. Builds are unsigned, so the
 README will explain the one-time macOS and Windows security prompts.
 
-## Phase 3: Calendar and integrations (calendar links implemented)
+## Phase 3: Calendar and integrations (calendar links and local MCP server done)
 
 Calendar links are implemented: private subscriptions, file import, cached agenda,
 event-linked notes, opt-in reminders and automatic capture, and enhancement-context
@@ -67,7 +67,9 @@ future work. Calendar support uses private calendar links (ICS), which Google Ca
 and Apple Calendar can all provide, so no developer accounts or sign-in apps are
 needed: meeting titles, attendees and links, starting a note from an event, and
 optional auto-start. Optional follow-ups that need no account: pre-meeting briefs
-from past notes, follow-up drafts, a local MCP server, and a generic webhook. Chat
+from past notes, follow-up drafts, and a generic webhook. The local MCP server is
+implemented: read-only stdio, explicit privacy switches, client setup snippets and
+a content-free access history. See [MCP](mcp.md). Chat
 actions and service integrations (Slack, Notion, CRM, and similar) would use the
 user's own tokens and stay optional. Require explicit confirmation before actions
 with external effects.
