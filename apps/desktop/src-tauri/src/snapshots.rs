@@ -28,16 +28,6 @@ fn own(window: &xcap::Window) -> bool {
             .unwrap_or_default()
             .to_lowercase()
             .contains("talkkeeper")
-        || {
-            #[cfg(windows)]
-            {
-                window.process_id().ok() == Some(std::process::id())
-            }
-            #[cfg(not(windows))]
-            {
-                false
-            }
-        }
 }
 fn supported() -> Result<()> {
     if cfg!(target_os = "linux")
