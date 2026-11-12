@@ -15,8 +15,9 @@ vi.mock("./api", () => ({
   data: vi.fn().mockResolvedValue(null),
   invoke: vi
     .fn()
-    .mockResolvedValue([{ id: "chosen-model", display_name: "Chosen model" }]),
+    .mockImplementation(async (command: string) => command === "list_models" ? [{ id: "chosen-model", display_name: "Chosen model" }] : null),
 }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 afterEach(cleanup);
 test("transcript selection deletes only selected segments", () => {
   const remove = vi.fn();

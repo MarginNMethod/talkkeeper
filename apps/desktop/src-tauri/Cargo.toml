@@ -23,7 +23,10 @@ chrono = { workspace = true }
 tokio = { workspace = true, features = ["sync", "time"] }
 futures-util = "0.3"
 rfd = "0.15"
-arboard = { version = "3", default-features = false }
+arboard = { version = "3", default-features = false, features = ["image-data"] }
+
+tauri-plugin-global-shortcut = "2"
+enigo = { version = "0.6", default-features = false, features = ["x11rb"] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

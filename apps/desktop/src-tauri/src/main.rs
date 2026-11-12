@@ -1,8 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod chat;
+mod dictation;
 mod people;
 mod session;
 mod setup;
+mod voice_flow;
 mod workspace;
 
 use futures_util::StreamExt;
@@ -544,6 +546,11 @@ fn data_inner(state: &AppState, action: String, payload: Value) -> Result<Value>
 
 fn main() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(dictation::shortcut)
+                .build(),
+        )
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
 
@@ -563,12 +570,16 @@ fn main() {
                 clipboard: Mutex::new(None),
             });
 
+            app.manage(dictation::VoiceState::default());
+            dictation::initialize(app.handle());
             app.manage(setup::SetupState::default());
             setup::resume(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             data,
+            dictation::dictation_data,
+            dictation::dictation_control,
             workspace::ask_workspace,
             setup::setup_status,
             setup::setup_plan,

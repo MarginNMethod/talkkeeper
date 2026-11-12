@@ -12,3 +12,6 @@ mod directory;
 pub use directory::{Company, Person};
 mod workspace;
 pub use workspace::*;
+
+mod dictation;
+pub use dictation::*;

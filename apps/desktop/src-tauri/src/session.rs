@@ -2,7 +2,10 @@ use super::*;
 use talkkeeper_audio::{Capture, CaptureConfig, Source};
 use talkkeeper_transcribe::{AudioChunk, Channel, Language, SttEngine, SttOptions, SttSession};
 
-async fn begin_transcription(engine: &dyn SttEngine, prefs: &Value) -> Result<SttSession> {
+pub(super) async fn begin_transcription(
+    engine: &dyn SttEngine,
+    prefs: &Value,
+) -> Result<SttSession> {
     let language = match prefs["language"].as_str().unwrap_or("auto") {
         "auto" => Language::Auto,
         code => Language::Code(code.into()),
@@ -51,6 +54,9 @@ pub async fn start_capture(
         if active.is_some() {
             return Err("Capture already active".into());
         }
+        if app.state::<dictation::VoiceState>().is_active() {
+            return Err("Stop dictation before starting meeting capture".into());
+        }
         *active = Some(tx);
     }
     let result = prepare_capture(app, &state, note_id, prefs, rx).await;
@@ -67,36 +73,7 @@ async fn prepare_capture(
     prefs: Value,
     rx: tokio::sync::mpsc::Receiver<String>,
 ) -> Result<()> {
-    let model = prefs["stt_model"]
-        .as_str()
-        .ok_or("Choose an STT model in Settings")?;
-    let engine: Box<dyn SttEngine> = if prefs["stt_engine"].as_str().unwrap_or("local") == "local" {
-        let model = talkkeeper_transcribe::models::MODELS
-            .iter()
-            .find(|m| m.name == model)
-            .ok_or("Unknown local model")?;
-        let manager = talkkeeper_transcribe::models::ModelManager::new(&state.directory);
-        if !manager.is_present(model).await.map_err(err)? {
-            return Err("Download the selected model first".into());
-        }
-        Box::new(
-            talkkeeper_transcribe::local::LocalEngine::load(manager.path(model))
-                .await
-                .map_err(err)?,
-        )
-    } else {
-        Box::new(talkkeeper_transcribe::cloud::OpenAiCompatible::new(
-            prefs["stt_url"]
-                .as_str()
-                .ok_or("Set the transcription endpoint")?
-                .into(),
-            KeyringSecretStore
-                .get("stt")
-                .map_err(err)?
-                .ok_or("Set the transcription key")?,
-            model.into(),
-        ))
-    };
+    let engine = speech_engine(state, &prefs).await?;
     let mut stt = begin_transcription(engine.as_ref(), &prefs).await?;
     let events = stt.events().ok_or("STT events unavailable")?;
     let capture = tokio::task::spawn_blocking(|| {
@@ -272,6 +249,40 @@ pub fn resume_capture(state: tauri::State<'_, AppState>) -> Result<()> {
 #[tauri::command]
 pub fn stop_capture(state: tauri::State<'_, AppState>) -> Result<()> {
     control(state, "stop")
+}
+
+pub(super) async fn speech_engine(state: &AppState, prefs: &Value) -> Result<Box<dyn SttEngine>> {
+    let model = prefs["stt_model"]
+        .as_str()
+        .ok_or("Choose an STT model in Settings")?;
+    let engine: Box<dyn SttEngine> = if prefs["stt_engine"].as_str().unwrap_or("local") == "local" {
+        let model = talkkeeper_transcribe::models::MODELS
+            .iter()
+            .find(|m| m.name == model)
+            .ok_or("Unknown local model")?;
+        let manager = talkkeeper_transcribe::models::ModelManager::new(&state.directory);
+        if !manager.is_present(model).await.map_err(err)? {
+            return Err("Download the selected model first".into());
+        }
+        Box::new(
+            talkkeeper_transcribe::local::LocalEngine::load(manager.path(model))
+                .await
+                .map_err(err)?,
+        )
+    } else {
+        Box::new(talkkeeper_transcribe::cloud::OpenAiCompatible::new(
+            prefs["stt_url"]
+                .as_str()
+                .ok_or("Set the transcription endpoint")?
+                .into(),
+            KeyringSecretStore
+                .get("stt")
+                .map_err(err)?
+                .ok_or("Set the transcription key")?,
+            model.into(),
+        ))
+    };
+    Ok(engine)
 }
 
 #[cfg(test)]

@@ -20,6 +20,8 @@ const recipes = [
 const firstRun = new URLSearchParams(location.search).has("setup");
 let setupDone = !firstRun;
 let setupAttempts = 0;
+let dictationConfig: Record<string, unknown> | null = null;
+let dictations: Record<string, unknown>[] = [];
 const listeners: Record<string, number[]> = {};
 mockIPC(async (command, args) => {
   const a = args as Record<string, unknown>;
@@ -29,6 +31,23 @@ mockIPC(async (command, args) => {
     return 1;
   }
   if (command === "plugin:event|unlisten") return;
+  if (command === "dictation_data") {
+    const p = a.payload as Record<string, unknown>;
+    if (a.action === "settings") return structuredClone(dictationConfig);
+    if (a.action === "save") { dictationConfig = structuredClone(p); return; }
+    if (a.action === "history") return structuredClone(dictations);
+    if (a.action === "permissions") return { microphone: "Enable Microphone", paste: "Enable Accessibility in Privacy & Security", devices: ["Test mic"] };
+  }
+  if (command === "dictation_control") {
+    for (const state of ["listening", "transcribing", "inserting"]) {
+      for (const handler of listeners["dictation://state"] ?? [])
+        (window as unknown as { __TAURI_INTERNALS__: { runCallback: (id: number, arg: unknown) => void } }).__TAURI_INTERNALS__.runCallback(handler, { event: "dictation://state", id: 1, payload: { state } });
+    }
+    dictations = [{ id: "dictation-1", text: "Plant herbs tomorrow.", created_at: new Date().toISOString() }];
+    for (const handler of listeners["dictation://history"] ?? [])
+      (window as unknown as { __TAURI_INTERNALS__: { runCallback: (id: number, arg: unknown) => void } }).__TAURI_INTERNALS__.runCallback(handler, { event: "dictation://history", id: 1, payload: { notice: "Automatic paste unavailable. Enable Accessibility in Privacy & Security; text remains on clipboard." } });
+    return;
+  }
   if (command === "setup_status")
     return { completed: setupDone, custom: false };
   if (command === "setup_plan")

@@ -40,6 +40,23 @@ only on request through your selected provider. Company names derive from email
 domains; free-mail exclusions are editable in `crates/core/free-mail-domains.txt`.
 Enrichment uses local records only; online enrichment is a possible later opt-in.
 
+## Voice typing
+
+Use **Settings → Voice typing** to choose a global shortcut (initially
+Cmd/Ctrl+Shift+Space), toggle or hold mode, and a cleanup style. Speak into the
+visible indicator; press the shortcut again to finish, or cancel in the indicator.
+The selected speech language and vocabulary apply. As spoken skips AI; Clean,
+Formal, and Bullet points use editable instructions and fall back to the transcript
+when AI is unavailable or takes more than four seconds. Dictionary replacements
+apply afterward. Local text history defaults to seven days; set retention to zero
+to disable it. Audio is never saved by dictation.
+
+Automatic insertion uses the clipboard and Cmd/Ctrl+V. Standard clipboard contents (text, HTML, images, file lists, or an empty clipboard)
+are restored after a short delay unless another app changed them. Custom
+application-specific clipboard formats cannot be restored. On
+Wayland or when paste permission is unavailable, text stays on the clipboard with
+guidance in the main window. See [manual permission checks](docs/testing.md).
+
 ## Recording consent
 
 **Many jurisdictions require consent from all parties before recording. Users are

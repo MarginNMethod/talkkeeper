@@ -61,3 +61,11 @@ capture constraints and participant notification in each recording flow.
 ## Phase 6: Organization controls
 
 SSO and SCIM; audit log; legal hold; retention policies; MDM packaging.
+
+### Voice typing implementation
+
+Global configurable dictation shortcut, toggle/hold modes, microphone-only capture,
+visible level indicator, optional timed AI cleanup, editable styles, vocabulary and
+literal replacement rules, and SQLite text history with retention are implemented.
+Meeting capture requires explicit confirmation before concurrent dictation. Native
+permissions and cross-app paste still require the hardware checks in testing.md.

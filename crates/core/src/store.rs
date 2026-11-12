@@ -35,7 +35,7 @@ impl Store {
         conn.execute_batch("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;")?;
         let tx = conn.transaction()?;
         let version: i64 = tx.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version > 4 {
+        if version > 5 {
             return Err(Error::Invalid(
                 "database schema is newer than this application",
             ));
@@ -59,6 +59,10 @@ impl Store {
                 crate::directory::sync_note(&tx, &note)?;
             }
             tx.pragma_update(None, "user_version", 4)?;
+        }
+        if version < 5 {
+            tx.execute_batch(include_str!("../migrations/005_dictation.sql"))?;
+            tx.pragma_update(None, "user_version", 5)?;
         }
         tx.commit()?;
         Ok(Self { conn })
