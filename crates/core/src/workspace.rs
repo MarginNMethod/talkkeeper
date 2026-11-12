@@ -36,7 +36,7 @@ pub struct Retrieval {
     pub sources: Vec<Source>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMessage {
+pub struct WorkspaceMessage {
     pub role: String,
     pub text: String,
     pub retrieval: Retrieval,
@@ -67,7 +67,7 @@ pub struct WorkspaceChat {
     pub id: Uuid,
     pub name: String,
     pub scope: Scope,
-    pub messages: Vec<ChatMessage>,
+    pub messages: Vec<WorkspaceMessage>,
     pub attachments: Vec<Attachment>,
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -1,5 +1,5 @@
 use super::*;
-use talkkeeper_core::{ChatMessage, Recipe, Retrieval, WorkspaceChat};
+use talkkeeper_core::{Recipe, Retrieval, WorkspaceChat, WorkspaceMessage};
 
 pub fn data(store: &mut Store, action: &str, payload: Value) -> Result<Value> {
     let id = || serde_json::from_value::<Uuid>(payload["id"].clone()).map_err(err);
@@ -199,12 +199,12 @@ async fn ask_with_provider(
         }
     }
     // Source links are rendered from trusted retrieval metadata, never model URLs.
-    chat.messages.push(ChatMessage {
+    chat.messages.push(WorkspaceMessage {
         role: "user".into(),
         text: question,
         retrieval: Retrieval::default(),
     });
-    chat.messages.push(ChatMessage {
+    chat.messages.push(WorkspaceMessage {
         role: "assistant".into(),
         text,
         retrieval,

@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod chat;
 mod session;
 mod setup;
 mod workspace;
@@ -375,6 +376,31 @@ fn data_inner(state: &AppState, action: String, payload: Value) -> Result<Value>
             .map_err(err)?;
             Ok(Value::Null)
         }
+        "chat_history" => Ok(json!(store.chat_history(id()?).map_err(err)?)),
+        "clear_chat" => {
+            store.clear_chat(id()?).map_err(err)?;
+            Ok(Value::Null)
+        }
+        "versions" => Ok(json!(store.summary_versions(id()?).map_err(err)?)),
+        "apply_revision" | "discard_revision" | "restore_summary" => {
+            let note_id = id()?;
+            let edit = Uuid::parse_str(payload["edit"].as_str().ok_or("Missing revision id")?)
+                .map_err(err)?;
+            match action.as_str() {
+                "apply_revision" => store.apply_revision(note_id, edit),
+                "discard_revision" => store.discard_revision(note_id, edit),
+                _ => store.restore_summary(note_id, edit),
+            }
+            .map_err(err)?;
+            Ok(json!(store.get_note(note_id).map_err(err)?))
+        }
+        "copy_text" => {
+            copy_text(
+                state,
+                payload["text"].as_str().ok_or("Missing text")?.into(),
+            )?;
+            Ok(Value::Null)
+        }
         "segments" => Ok(json!(store.list_transcript_segments(id()?).map_err(err)?)),
         "delete_segments" => {
             let ids: Vec<Uuid> = serde_json::from_value(payload["ids"].clone()).map_err(err)?;
@@ -524,6 +550,7 @@ fn main() {
             setup::setup_cancel,
             start_note,
             enhance_note,
+            chat::chat_note,
             list_models,
             download_model,
             session::start_capture,
@@ -545,7 +572,7 @@ mod tests {
 
     use super::*;
 
-    fn state() -> AppState {
+    pub(super) fn state() -> AppState {
         AppState {
             store: Arc::new(Mutex::new(Store::open_in_memory().unwrap())),
             directory: std::env::temp_dir().join(Uuid::new_v4().to_string()),
@@ -616,7 +643,7 @@ mod tests {
         );
     }
 
-    struct MockProvider;
+    pub(super) struct MockProvider;
     #[async_trait::async_trait]
     impl talkkeeper_llm::LlmProvider for MockProvider {
         fn id(&self) -> &str {
@@ -639,7 +666,12 @@ mod tests {
             request: CompletionRequest,
         ) -> talkkeeper_llm::Result<talkkeeper_llm::TokenStream> {
             assert_eq!(request.model, "user-selected");
-            assert!(request.messages[0].content.contains("Planning"));
+            assert!(request
+                .messages
+                .last()
+                .unwrap()
+                .content
+                .contains("Planning"));
             Ok(Box::pin(futures_util::stream::iter(vec![
                 Ok("## Decisions\n".into()),
                 Ok("Plant herbs [#1]".into()),

@@ -35,7 +35,7 @@ impl Store {
         conn.execute_batch("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;")?;
         let tx = conn.transaction()?;
         let version: i64 = tx.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version > 2 {
+        if version > 3 {
             return Err(Error::Invalid(
                 "database schema is newer than this application",
             ));
@@ -45,8 +45,12 @@ impl Store {
             tx.pragma_update(None, "user_version", 1)?;
         }
         if version < 2 {
-            tx.execute_batch(include_str!("../migrations/002_workspace.sql"))?;
+            tx.execute_batch(include_str!("../migrations/002_chat.sql"))?;
             tx.pragma_update(None, "user_version", 2)?;
+        }
+        if version < 3 {
+            tx.execute_batch(include_str!("../migrations/003_workspace.sql"))?;
+            tx.pragma_update(None, "user_version", 3)?;
             rebuild_search(&tx)?;
         }
         tx.commit()?;
@@ -58,6 +62,122 @@ impl Store {
         rebuild_search(&tx)?;
         tx.commit()?;
         Ok(result)
+    }
+    pub fn add_chat_message(&mut self, message: &ChatMessage) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO chat_messages VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                message.id.to_string(),
+                message.note_id.to_string(),
+                message.role,
+                message.content,
+                message.created_at.to_rfc3339(),
+                message.proposed_edit_id.map(|id| id.to_string()),
+                message.revision
+            ],
+        )?;
+        Ok(())
+    }
+    pub fn chat_history(&self, note_id: Uuid) -> Result<Vec<ChatMessage>> {
+        let mut stmt = self.conn.prepare("SELECT id,role,content,created_at,proposed_edit_id,revision FROM chat_messages WHERE note_id=? ORDER BY rowid")?;
+        let rows = stmt.query_map([note_id.to_string()], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, Option<String>>(4)?,
+                r.get::<_, Option<String>>(5)?,
+            ))
+        })?;
+        rows.map(|row| {
+            let (id, role, content, date, edit, revision) = row?;
+            Ok(ChatMessage {
+                id: parse_id(&id)?,
+                note_id,
+                role,
+                content,
+                created_at: parse_date(&date)?,
+                proposed_edit_id: edit.map(|id| parse_id(&id)).transpose()?,
+                revision,
+            })
+        })
+        .collect()
+    }
+    pub fn clear_chat(&mut self, note_id: Uuid) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM chat_messages WHERE note_id=?",
+            [note_id.to_string()],
+        )?;
+        Ok(())
+    }
+    pub fn discard_revision(&mut self, note_id: Uuid, edit: Uuid) -> Result<()> {
+        self.conn.execute("UPDATE chat_messages SET revision=NULL,proposed_edit_id=NULL WHERE note_id=? AND proposed_edit_id=?",params![note_id.to_string(),edit.to_string()])?;
+        Ok(())
+    }
+    /// Only this explicit operation accepts a generated proposal.
+    pub fn apply_revision(&mut self, note_id: Uuid, edit: Uuid) -> Result<()> {
+        self.write(|tx| {
+            let revision: String=tx.query_row("SELECT revision FROM chat_messages WHERE note_id=? AND proposed_edit_id=? AND revision IS NOT NULL",params![note_id.to_string(),edit.to_string()],|r| r.get(0)).optional()?.ok_or(Error::NotFound)?;
+            replace_summary(tx,note_id,Some(revision))?;
+            tx.execute("UPDATE chat_messages SET revision=NULL,proposed_edit_id=NULL WHERE note_id=? AND proposed_edit_id=?",params![note_id.to_string(),edit.to_string()])?;
+            Ok(())
+        })
+    }
+    pub fn summary_versions(&self, note_id: Uuid) -> Result<Vec<SummaryVersion>> {
+        let mut stmt=self.conn.prepare("SELECT id,content,created_at FROM summary_versions WHERE note_id=? ORDER BY rowid DESC")?;
+        let rows = stmt.query_map([note_id.to_string()], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })?;
+        rows.map(|row| {
+            let (id, content, date) = row?;
+            Ok(SummaryVersion {
+                id: parse_id(&id)?,
+                note_id,
+                content,
+                created_at: parse_date(&date)?,
+            })
+        })
+        .collect()
+    }
+    pub fn restore_summary(&mut self, note_id: Uuid, version: Uuid) -> Result<()> {
+        self.write(|tx| {
+            let content = tx
+                .query_row(
+                    "SELECT content FROM summary_versions WHERE note_id=? AND id=?",
+                    params![note_id.to_string(), version.to_string()],
+                    |r| r.get::<_, Option<String>>(0),
+                )
+                .optional()?
+                .ok_or(Error::NotFound)?;
+            replace_summary(tx, note_id, content)
+        })
+    }
+    pub fn relevant_segments(
+        &self,
+        note_id: Uuid,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<TranscriptSegment>> {
+        let terms: Vec<_> = query
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|s| s.len() > 2)
+            .take(32)
+            .map(|s| format!("\"{}\"", s))
+            .collect();
+        if terms.is_empty() {
+            return Ok(vec![]);
+        }
+        let mut stmt=self.conn.prepare("SELECT s.data FROM segment_search f JOIN segments s ON s.id=f.segment_id WHERE segment_search MATCH ?1 AND f.note_id=?2 ORDER BY rank LIMIT ?3")?;
+        let rows = stmt.query_map(
+            params![terms.join(" OR "), note_id.to_string(), limit as i64],
+            |r| r.get::<_, String>(0),
+        )?;
+        rows.map(|row| decode(&row?)).collect()
     }
     pub fn create_note(&mut self, note: &Note) -> Result<()> {
         self.write(|tx| {
@@ -554,4 +674,137 @@ fn rebuild_search(tx: &Transaction<'_>) -> Result<()> {
         )?;
     }
     Ok(())
+}
+
+fn parse_date(text: &str) -> Result<chrono::DateTime<Utc>> {
+    text.parse()
+        .map_err(|_| Error::Invalid("invalid stored date"))
+}
+fn replace_summary(tx: &Transaction<'_>, note_id: Uuid, content: Option<String>) -> Result<()> {
+    let mut note = get_note(tx, note_id)?.ok_or(Error::NotFound)?;
+    tx.execute(
+        "INSERT INTO summary_versions VALUES (?1,?2,?3,?4)",
+        params![
+            Uuid::new_v4().to_string(),
+            note_id.to_string(),
+            note.summary_markdown,
+            Utc::now().to_rfc3339()
+        ],
+    )?;
+    note.summary_markdown = content;
+    note.updated_at = Utc::now();
+    save_note(tx, &note)
+}
+
+#[cfg(test)]
+mod chat_tests {
+    use super::*;
+    #[test]
+    fn history_proposals_versions_and_cascade() {
+        let mut store = Store::open_in_memory().unwrap();
+        let note = Note::new("Review");
+        store.create_note(&note).unwrap();
+        let edit = Uuid::new_v4();
+        let message = ChatMessage {
+            id: Uuid::new_v4(),
+            note_id: note.id,
+            role: "assistant".into(),
+            content: "New notes [#1]".into(),
+            created_at: Utc::now(),
+            proposed_edit_id: Some(edit),
+            revision: Some("New notes [#1]".into()),
+        };
+        store.add_chat_message(&message).unwrap();
+        assert_eq!(store.chat_history(note.id).unwrap().len(), 1);
+        assert_eq!(
+            store.get_note(note.id).unwrap().unwrap().summary_markdown,
+            None
+        );
+        assert!(store.apply_revision(Uuid::new_v4(), edit).is_err());
+        store.apply_revision(note.id, edit).unwrap();
+        assert_eq!(
+            store
+                .get_note(note.id)
+                .unwrap()
+                .unwrap()
+                .summary_markdown
+                .as_deref(),
+            Some("New notes [#1]")
+        );
+        assert!(store.apply_revision(note.id, edit).is_err());
+        let versions = store.summary_versions(note.id).unwrap();
+        store.restore_summary(note.id, versions[0].id).unwrap();
+        assert_eq!(
+            store.get_note(note.id).unwrap().unwrap().summary_markdown,
+            None
+        );
+        assert_eq!(store.summary_versions(note.id).unwrap().len(), 2);
+        store.clear_chat(note.id).unwrap();
+        assert!(store.chat_history(note.id).unwrap().is_empty());
+        store
+            .add_chat_message(&ChatMessage {
+                proposed_edit_id: Some(edit),
+                ..message
+            })
+            .unwrap();
+        store.discard_revision(note.id, edit).unwrap();
+        assert!(store.apply_revision(note.id, edit).is_err());
+        store.purge_note(note.id).unwrap();
+        assert!(store.chat_history(note.id).unwrap().is_empty());
+        assert!(store.summary_versions(note.id).unwrap().is_empty());
+    }
+    #[test]
+    fn migration_preserves_notes_and_indexes_existing_segments() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(include_str!("../migrations/001_initial.sql"))
+            .unwrap();
+        conn.pragma_update(None, "user_version", 1).unwrap();
+        let note = Note::new("Migration");
+        conn.execute(
+            "INSERT INTO notes VALUES (?1,?2,NULL)",
+            params![note.id.to_string(), encode(&note).unwrap()],
+        )
+        .unwrap();
+        let seg = TranscriptSegment {
+            id: Uuid::new_v4(),
+            note_id: note.id,
+            seq: 12,
+            start_ms: 0,
+            end_ms: 100,
+            speaker: Speaker::Me,
+            text: "orchard deadline Friday".into(),
+            lang: None,
+            created_at: Utc::now(),
+        };
+        conn.execute(
+            "INSERT INTO segments VALUES (?1,?2,12,?3,?4)",
+            params![
+                seg.id.to_string(),
+                note.id.to_string(),
+                seg.created_at.to_rfc3339(),
+                encode(&seg).unwrap()
+            ],
+        )
+        .unwrap();
+        let mut store = Store::initialize(conn).unwrap();
+        assert!(store.get_note(note.id).unwrap().is_some());
+        assert_eq!(
+            store
+                .relevant_segments(note.id, "What's the orchard deadline?", 5)
+                .unwrap()[0]
+                .seq,
+            12
+        );
+        assert!(store
+            .relevant_segments(Uuid::new_v4(), "orchard", 5)
+            .unwrap()
+            .is_empty());
+        store
+            .delete_transcript_segments(note.id, &[seg.id])
+            .unwrap();
+        assert!(store
+            .relevant_segments(note.id, "orchard", 5)
+            .unwrap()
+            .is_empty());
+    }
 }

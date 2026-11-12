@@ -1,4 +1,6 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
+let chat: Record<string, unknown>[] = [];
+let versions: Record<string, unknown>[] = [];
 let notes: Record<string, unknown>[] = [];
 let chats: Record<string, unknown>[] = [];
 const recipes = [
@@ -80,6 +82,29 @@ mockIPC(async (command, args) => {
     setupDone = true;
     return;
   }
+  if (command === "chat_note") {
+    const message = {
+      id: "chat-1",
+      role: "assistant",
+      content: "Garden plan [#12]",
+      revision: "Garden plan [#12]",
+      proposed_edit_id: "edit-1",
+    };
+    for (const handler of listeners["chat://delta"] ?? [])
+      (
+        window as unknown as {
+          __TAURI_INTERNALS__: {
+            runCallback: (id: number, arg: unknown) => void;
+          };
+        }
+      ).__TAURI_INTERNALS__.runCallback(handler, {
+        event: "chat://delta",
+        id: 1,
+        payload: { note_id: a.noteId, delta: message.content },
+      });
+    chat.push(message);
+    return message;
+  }
   if (command === "enhance_note") {
     const text = "## Decisions\nProceed with the garden plan.";
 
@@ -157,6 +182,34 @@ mockIPC(async (command, args) => {
         notes.push(n);
         return structuredClone(n);
       }
+      case "chat_history":
+        return chat;
+      case "versions":
+        return versions;
+      case "copy_text":
+        return null;
+      case "apply_revision":
+        versions.unshift({
+          id: "version-1",
+          content: notes[0].summary_markdown,
+          created_at: new Date().toISOString(),
+        });
+        notes[0].summary_markdown = "Garden plan [#12]";
+        chat = chat.map((m) => ({
+          ...m,
+          revision: null,
+          proposed_edit_id: null,
+        }));
+        return { ...notes[0] };
+      case "discard_revision":
+        chat = [];
+        return { ...notes[0] };
+      case "restore_summary":
+        notes[0].summary_markdown = versions[0].content;
+        return { ...notes[0] };
+      case "clear_chat":
+        chat = [];
+        return null;
       case "settings":
         return { provider: "Ollama" };
       case "speech_models":
@@ -176,6 +229,14 @@ mockIPC(async (command, args) => {
             start_ms: 90000,
             speaker: "Me",
             text: "garden approved",
+          },
+          {
+            id: "seg-12",
+            note_id: "note-1",
+            seq: 12,
+            start_ms: 65000,
+            speaker: "Me",
+            text: "Proceed with the garden plan.",
           },
         ];
       case "start_note": {
