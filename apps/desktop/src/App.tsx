@@ -13,6 +13,7 @@ import { Transcript } from "./Transcript";
 import { Settings } from "./Settings";
 import { Templates } from "./Templates";
 import { Setup } from "./Setup";
+import { People, Attendees, type Person } from "./People";
 import { Summary } from "./Summary";
 export function App() {
   const [notes, setNotes] = useState<Note[]>([]),
@@ -34,6 +35,10 @@ export function App() {
     [folders, setFolders] = useState<{ id: string; name: string }[]>([]),
     [folder, setFolder] = useState(""),
     [progress, setProgress] = useState("");
+  const [directory, setDirectory] = useState<"people" | "companies" | null>(
+    null,
+  );
+  const [personId, setPersonId] = useState<string | undefined>();
   const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null);
   useEffect(() => {
     void invoke<{ completed: boolean; custom: boolean }>("setup_status").then((s) => setSetupNeeded(!s.completed && !s.custom)).catch(fail);
@@ -145,6 +150,7 @@ export function App() {
 
   async function select(n: Note) {
     await flush();
+    setDirectory(null);
     setNote(n);
     setTemplate(n.template_id ?? "auto");
     setSegments(await data("segments", { id: n.id }));
@@ -206,8 +212,30 @@ export function App() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <button onClick={() => setTrash(false)}>Notes</button>
-        <button onClick={() => setTrash(true)}>Trash</button>
+        <button
+          onClick={() => {
+            setDirectory(null);
+            setTrash(false);
+          }}
+        >
+          Notes
+        </button>
+        {(["people", "companies"] as const).map((kind) => (
+          <button
+            key={kind}
+            onClick={() =>
+              void flush()
+                .then(() => {
+                  setPersonId(undefined);
+                  setDirectory(kind);
+                })
+                .catch(fail)
+            }
+          >
+            {kind === "people" ? "People" : "Companies"}
+          </button>
+        ))}
+        <button onClick={() => { setDirectory(null); setTrash(true); }}>Trash</button>
         <label>
           Folder
           <select value={folder} onChange={(e) => setFolder(e.target.value)}>
@@ -310,6 +338,27 @@ export function App() {
           />
         ) : setupNeeded !== false ? (
           setupNeeded === null ? <p role="status">Checking setup…</p> : <Setup onReady={() => { setSetupNeeded(false); void create().catch(fail); }} onAdvanced={() => void data<Preferences>("settings").then((p) => setSettings({ ...p, provider: "Ollama" })).catch(fail)} />
+        ) : directory ? (
+          <People
+            key={directory + (personId ?? "")}
+            kind={directory}
+            initialPerson={personId}
+            onError={fail}
+            onSelect={(n) => void select(n).catch(fail)}
+            onStart={(p: Person) =>
+              void (async () => {
+                await flush();
+                const n = await data<Note>("start_note", {});
+                const next = {
+                  ...n,
+                  attendees: [{ name: p.name, email: p.email }],
+                };
+                await data("update", next);
+                await select(next);
+                await refresh();
+              })().catch(fail)
+            }
+          />
         ) : note ? (
           <>
             <header>
@@ -369,19 +418,28 @@ export function App() {
                 </button>
               )}
             </header>
-            <label>
-              Attendees
-              <input
-                value={note.attendees.map((a) => a.name).join(", ")}
-                onChange={(e) =>
-                  update({
-                    attendees: e.target.value
-                      .split(",")
-                      .map((name) => ({ name: name.trim(), email: "" })),
+            <Attendees
+              key={note.id}
+              value={note.attendees}
+              onChange={(attendees) => update({ attendees })}
+              onOpen={(id) =>
+                void flush()
+                  .then(async () => {
+                    const people = await data<Person[]>("people");
+                    const p = people.find(
+                      (p) =>
+                        p.id === id ||
+                        p.email.toLowerCase() === id.toLowerCase() ||
+                        p.name.toLowerCase() === id.toLowerCase(),
+                    );
+                    if (p) {
+                      setPersonId(p.id);
+                      setDirectory("people");
+                    }
                   })
-                }
-              />
-            </label>
+                  .catch(fail)
+              }
+            />
             <label>
               File in
               <select

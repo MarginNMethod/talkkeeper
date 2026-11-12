@@ -20,6 +20,15 @@ smaller model where possible. **Use my own AI provider instead** opens Advanced
 settings, where provider and model choices remain available. Select **Automatic**
 to return to the managed local AI after setup.
 
+## People and companies
+
+The local directory grows from note attendees, with editable profiles, meeting
+history, duplicate merging and undo, attendee suggestions, and note creation with
+a person. Trashed meetings are excluded. Optional AI-generated recent topics run
+only on request through your selected provider. Company names derive from email
+domains; free-mail exclusions are editable in `crates/core/free-mail-domains.txt`.
+Enrichment uses local records only; online enrichment is a possible later opt-in.
+
 ## Recording consent
 
 **Many jurisdictions require consent from all parties before recording. Users are

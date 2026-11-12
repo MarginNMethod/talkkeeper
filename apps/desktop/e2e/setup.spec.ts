@@ -5,10 +5,11 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/?*", async (route) => { const response = await route.fetch(); await route.fulfill({ response, body: (await response.text()).replace("/src/main.tsx", "/e2e/harness.ts") }); });
 });
 test("consent, sizes, progress, ready, and first note", async ({ page }) => {
-  await page.goto("/?setup");
+  await page.goto("/?setup&hold");
   await expect(page.getByText(/6.8 GB/)).toBeVisible();
   await page.getByRole("button", { name: "Set up automatically" }).click();
   await expect(page.getByRole("progressbar")).toHaveAttribute("value", "50");
+  await page.evaluate(() => (window as unknown as {finishSetup: () => void}).finishSetup());
   await expect(page.getByRole("heading", { name: "You're ready" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Note title" })).toBeVisible();
 });

@@ -27,6 +27,10 @@ terminal or API key. Catalog refresh remains off and is not implemented.
 Chat over notes with citations; reusable prompt recipes; people and companies
 directory; shared-screen snapshots; voice typing.
 
+People and companies are implemented with local attendee-derived profiles,
+manual editing, duplicate merge/undo, meeting histories, suggestions, and optional
+streamed recent topics. Online enrichment remains a possible later opt-in.
+
 ## Phase 3: Connected workflows
 
 Google, Microsoft, and ICS calendars; pre-meeting briefs; follow-up drafts; chat

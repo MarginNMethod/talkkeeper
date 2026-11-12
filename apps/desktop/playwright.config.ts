@@ -1,7 +1,8 @@
+const port = process.env.PLAYWRIGHT_PORT ?? "1427";
 export default {
   testDir: "./e2e",
   use: {
-    baseURL: "http://localhost:1420",
+    baseURL: `http://127.0.0.1:${port}`,
     headless: true,
     trace: "off",
     // Set PLAYWRIGHT_CHROMIUM_PATH to use a pre-installed browser.
@@ -11,8 +12,8 @@ export default {
     },
   },
   webServer: {
-    command: "pnpm dev --host 0.0.0.0",
-    url: "http://localhost:1420",
-    reuseExistingServer: true,
+    command: `pnpm dev --host 127.0.0.1 --port ${port}`,
+    url: `http://127.0.0.1:${port}`,
+    reuseExistingServer: false,
   },
 };

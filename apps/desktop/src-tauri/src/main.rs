@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod people;
 mod session;
 mod setup;
 
@@ -339,6 +340,31 @@ fn data_inner(state: &AppState, action: String, payload: Value) -> Result<Value>
     let mut store = state.store.lock().map_err(err)?;
     let id = || Uuid::parse_str(payload["id"].as_str().unwrap_or("")).map_err(err);
     match action.as_str() {
+        "people" => Ok(json!(store.list_people().map_err(err)?)),
+        "companies" => Ok(json!(store.list_companies().map_err(err)?)),
+        "person_meetings" => Ok(json!(store.person_meetings(id()?).map_err(err)?)),
+        "company_meetings" => Ok(json!(store.company_meetings(id()?).map_err(err)?)),
+        "can_undo_people_merge" => Ok(json!(store.can_undo_people_merge().map_err(err)?)),
+        "duplicates" => Ok(json!(store.duplicate_people().map_err(err)?)),
+        "save_person" => {
+            store
+                .update_person(&serde_json::from_value(payload).map_err(err)?)
+                .map_err(err)?;
+            Ok(Value::Null)
+        }
+        "merge_people" => {
+            store
+                .merge_people(
+                    id()?,
+                    Uuid::parse_str(payload["remove"].as_str().unwrap_or("")).map_err(err)?,
+                )
+                .map_err(err)?;
+            Ok(Value::Null)
+        }
+        "undo_people_merge" => {
+            store.undo_people_merge().map_err(err)?;
+            Ok(Value::Null)
+        }
         "start_note" => {
             let note = Note::new(payload["title"].as_str().unwrap_or("Untitled conversation"));
             store.create_note(&note).map_err(err)?;
@@ -520,6 +546,7 @@ fn main() {
             setup::setup_plan,
             setup::setup_run,
             setup::setup_cancel,
+            people::recent_topics,
             start_note,
             enhance_note,
             list_models,

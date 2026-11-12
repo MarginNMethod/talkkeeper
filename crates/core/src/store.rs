@@ -22,7 +22,7 @@ pub enum Error {
 }
 
 pub struct Store {
-    conn: Connection,
+    pub(crate) conn: Connection,
 }
 impl Store {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -35,7 +35,7 @@ impl Store {
         conn.execute_batch("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;")?;
         let tx = conn.transaction()?;
         let version: i64 = tx.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version > 1 {
+        if version > 2 {
             return Err(Error::Invalid(
                 "database schema is newer than this application",
             ));
@@ -43,6 +43,13 @@ impl Store {
         if version == 0 {
             tx.execute_batch(include_str!("../migrations/001_initial.sql"))?;
             tx.pragma_update(None, "user_version", 1)?;
+        }
+        if version < 2 {
+            tx.execute_batch(include_str!("../migrations/002_people.sql"))?;
+            for note in all_notes(&tx)? {
+                crate::directory::sync_note(&tx, &note)?;
+            }
+            tx.pragma_update(None, "user_version", 2)?;
         }
         tx.commit()?;
         Ok(Self { conn })
@@ -64,6 +71,7 @@ impl Store {
                     note.folder_id.map(|id| id.to_string())
                 ],
             )?;
+            crate::directory::sync_note(tx, note)?;
             Ok(())
         })
     }
@@ -483,6 +491,7 @@ fn all_notes(conn: &Connection) -> Result<Vec<Note>> {
     rows.map(|s| decode(&s?)).collect()
 }
 fn save_note(tx: &Transaction<'_>, n: &Note) -> Result<()> {
+    crate::directory::sync_note(tx, n)?;
     tx.execute(
         "UPDATE notes SET data=?,folder_id=? WHERE id=?",
         params![
