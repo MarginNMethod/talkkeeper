@@ -3,3 +3,17 @@ name = "talkkeeper-llm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["time"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+async-trait = "0.1"
+futures-util = "0.3"
+async-stream = "0.3"
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+
+[dev-dependencies]
+wiremock = "0.6"
