@@ -11,11 +11,8 @@ impl SCStreamOutputTrait for AudioOutput {
         match sample.audio_buffer_list() {
             Ok(list) => {
                 for buffer in &list {
-                    let samples: Vec<_> = buffer
-                        .data()
-                        .chunks_exact(4)
-                        .map(|b| f32::from_ne_bytes(b.try_into().unwrap()))
-                        .collect();
+                    let (chunks, _) = buffer.data().as_chunks::<4>();
+                    let samples: Vec<f32> = chunks.iter().map(|b| f32::from_ne_bytes(*b)).collect();
                     self.0.send(Source::System, 48000, 1, &samples);
                 }
             }
