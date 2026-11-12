@@ -32,6 +32,8 @@ export interface Template {
   built_in: boolean;
 }
 export interface Preferences {
+  snapshots_preference?: string;
+  snapshot_retention?: number;
   provider?: string;
   base_url?: string;
   model?: string;

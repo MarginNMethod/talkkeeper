@@ -292,3 +292,13 @@ meter {
 .workspace-chat textarea { display: block; width: 100%; min-height: 6rem; }
 .workspace-chat article { padding: .8rem; border-bottom: 1px solid #8885; }
 .workspace-chat .pill { display: inline-block; margin: .2rem; }
+
+.dictation-indicator { padding: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dictation-indicator p { margin: 0; }
+.dictation-cue { color: #36aa80; animation: dictation-cue .5s ease-out; }
+@keyframes dictation-cue { from { opacity: .2; transform: scale(.5); } to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .dictation-cue { animation: none; } }
+.snapshot-controls { position: sticky; top: 0; z-index: 20; background: var(--panel); padding: .5rem; border-bottom: 1px solid #888; }
+.snapshot-gallery { display: flex; flex-wrap: wrap; gap: 1rem; }
+.snapshot-gallery figure { margin: 0; max-width: 320px; }
+.snapshot-thumbnail { width: 100%; height: auto; }
