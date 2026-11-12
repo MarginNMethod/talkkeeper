@@ -12,6 +12,13 @@ use tokio::sync::mpsc;
 
 mod system;
 
+/// Whether this build can capture system (computer) audio.
+pub const SYSTEM_AUDIO_AVAILABLE: bool = cfg!(any(
+    target_os = "linux",
+    target_os = "windows",
+    all(target_os = "macos", feature = "macos-screencapture")
+));
+
 #[derive(Clone, Debug, Default)]
 pub struct CaptureConfig {
     /// CPAL device name; `None` selects the default microphone.
@@ -321,7 +328,8 @@ pub fn permissions_status() -> PermissionsStatus {
         microphone: if cfg!(target_os = "macos") { "Enable Microphone in System Settings > Privacy & Security; the app needs NSMicrophoneUsageDescription." }
             else if cfg!(target_os = "windows") { "Enable microphone access for desktop apps in Windows Privacy settings." }
             else { "Allow microphone access in your audio server and sandbox settings." }.into(),
-        system: if cfg!(target_os = "macos") { "macOS 14+: enable Screen Recording in System Settings > Privacy & Security, then restart the app." }
+        system: if cfg!(all(target_os = "macos", not(feature = "macos-screencapture"))) { "System audio is not included in this macOS build (it needs Xcode 26 or newer to compile). Microphone capture still works. See the README to enable it." }
+            else if cfg!(target_os = "macos") { "macOS 14+: enable Screen Recording in System Settings > Privacy & Security, then restart the app." }
             else if cfg!(target_os = "windows") { "WASAPI loopback captures the default render endpoint; no separate permission prompt is available." }
             else { "A running PulseAudio or PipeWire-pulse server with a default sink monitor is required." }.into(),
     }

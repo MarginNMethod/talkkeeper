@@ -102,7 +102,7 @@ async fn prepare_capture(
     let capture = tokio::task::spawn_blocking(|| {
         Capture::start(CaptureConfig {
             mic_device: None,
-            capture_system: true,
+            capture_system: talkkeeper_audio::SYSTEM_AUDIO_AVAILABLE,
         })
     })
     .await

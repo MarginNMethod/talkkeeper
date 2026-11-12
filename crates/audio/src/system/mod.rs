@@ -13,13 +13,17 @@ use linux::NativeSource;
 mod windows;
 #[cfg(target_os = "windows")]
 use windows::NativeSource;
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "macos-screencapture"))]
 mod macos;
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "macos-screencapture"))]
 use macos::NativeSource;
 
 pub fn open(_output: &Emitter) -> Result<Box<dyn SystemAudioSource>> {
-    #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "windows",
+        all(target_os = "macos", feature = "macos-screencapture")
+    ))]
     {
         #[cfg(target_os = "macos")]
         let source = NativeSource::open(_output.clone())?;
@@ -27,10 +31,14 @@ pub fn open(_output: &Emitter) -> Result<Box<dyn SystemAudioSource>> {
         let source = NativeSource::open()?;
         Ok(Box::new(source))
     }
-    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "windows",
+        all(target_os = "macos", feature = "macos-screencapture")
+    )))]
     {
         Err(crate::backend(
-            "system capture is unsupported on this platform",
+            "system audio capture is not available in this build",
         ))
     }
 }

@@ -58,6 +58,14 @@ pnpm install
 pnpm --filter @talkkeeper/desktop tauri dev
 ```
 
+**macOS system audio.** Capturing computer audio on macOS uses ScreenCaptureKit, whose Rust
+binding only compiles with Xcode 26 or newer (the macOS 26 SDK). By default the desktop
+app is built without it, so it runs with microphone capture only. With a recent Xcode:
+
+```sh
+pnpm --filter @talkkeeper/desktop tauri dev -- --features macos-system-audio
+```
+
 For the browser-only placeholder: `pnpm --filter @talkkeeper/desktop dev`.
 macOS requires Xcode Command Line Tools; Windows requires the MSVC C++ build tools
 and WebView2 runtime.

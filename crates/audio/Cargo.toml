@@ -4,6 +4,12 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# On by default so CI exercises it. The ScreenCaptureKit binding needs the macOS 26 SDK
+# (Xcode 26+) to build; the desktop app leaves this off unless asked.
+default = ["macos-screencapture"]
+macos-screencapture = ["dep:screencapturekit"]
+
 [dependencies]
 cpal = "0.15.3"
 tokio = { workspace = true, features = ["sync", "time"] }
@@ -16,7 +22,7 @@ libpulse-binding = "2.30.1"
 wasapi = "0.27"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-screencapturekit = { version = "11.1.2", features = ["macos_14_0"] }
+screencapturekit = { version = "11.1.2", features = ["macos_14_0"], optional = true }
 
 [dev-dependencies]
 hound = "3.5.1"

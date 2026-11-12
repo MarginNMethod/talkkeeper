@@ -14,7 +14,7 @@ talkkeeper-core = { path = "../../../crates/core" }
 talkkeeper-llm = { path = "../../../crates/llm" }
 talkkeeper-templates = { path = "../../../crates/templates" }
 talkkeeper-transcribe = { path = "../../../crates/transcribe", features = ["cloud"] }
-talkkeeper-audio = { path = "../../../crates/audio" }
+talkkeeper-audio = { path = "../../../crates/audio", default-features = false }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
@@ -26,6 +26,8 @@ arboard = { version = "3", default-features = false }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
+# macOS system audio needs the macOS 26 SDK (Xcode 26+) to compile.
+macos-system-audio = ["talkkeeper-audio/macos-screencapture"]
 
 [dev-dependencies]
 async-trait = "0.1"
