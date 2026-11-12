@@ -282,6 +282,7 @@ mod tests {
             store: Arc::new(Mutex::new(store)),
             directory: std::env::temp_dir(),
             capture: Mutex::new(None),
+            snapshots: Mutex::new(snapshots::SnapshotSession::default()),
             clipboard: Mutex::new(None),
         };
         let mut output = String::new();

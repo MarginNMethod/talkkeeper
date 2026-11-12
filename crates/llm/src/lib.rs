@@ -60,9 +60,26 @@ pub struct CompletionResponse {
 #[async_trait]
 pub trait LlmProvider: Send + Sync {
     fn id(&self) -> &str;
+    /// Stable consent scope for image transfer. None means verified local inference.
+    fn image_transfer_scope(&self) -> Option<String> {
+        Some(self.id().to_owned())
+    }
     async fn list_models(&self) -> Result<Vec<ModelInfo>>;
     async fn complete(&self, req: CompletionRequest) -> Result<CompletionResponse>;
     async fn stream(&self, req: CompletionRequest) -> Result<TokenStream>;
+    async fn supports_images(&self, _model: &str) -> Result<bool> {
+        Ok(false)
+    }
+    async fn stream_images(
+        &self,
+        req: CompletionRequest,
+        images: Vec<String>,
+    ) -> Result<TokenStream> {
+        if !images.is_empty() {
+            return Err(Error::Data("This provider cannot read images".into()));
+        }
+        self.stream(req).await
+    }
 }
 pub trait SecretStore: Send + Sync {
     fn get(&self, name: &str) -> Result<Option<String>>;
@@ -181,7 +198,9 @@ pub fn build_provider(
         })
         .transpose()?;
     Ok(Box::new(HttpProvider {
-        client: Client::new(),
+        client: Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()?,
         base: base.trim_end_matches('/').into(),
         key,
         kind,
@@ -289,6 +308,23 @@ impl LlmProvider for HttpProvider {
             Kind::Compatible => "openai-compatible",
         }
     }
+    fn image_transfer_scope(&self) -> Option<String> {
+        let local = reqwest::Url::parse(&self.base).ok().is_some_and(|url| {
+            ["http", "https"].contains(&url.scheme())
+                && url.host_str().is_some_and(|host| {
+                    host == "localhost"
+                        || host
+                            .trim_matches(['[', ']'])
+                            .parse::<std::net::IpAddr>()
+                            .is_ok_and(|ip| ip.is_loopback())
+                })
+        });
+        if self.kind == Kind::Ollama && local {
+            None
+        } else {
+            Some(format!("{}:{}", self.id(), self.base))
+        }
+    }
     async fn list_models(&self) -> Result<Vec<ModelInfo>> {
         let path = if self.kind == Kind::Ollama {
             "/api/tags"
@@ -356,8 +392,51 @@ impl LlmProvider for HttpProvider {
             });
         Ok(CompletionResponse { text, usage })
     }
+    async fn supports_images(&self, model: &str) -> Result<bool> {
+        let value: Value = if self.kind == Kind::Ollama {
+            self.send(Method::POST, "/api/show", Some(&json!({"model":model})))
+                .await?
+                .json()
+                .await?
+        } else {
+            let value: Value = self
+                .send(Method::GET, "/v1/models", None)
+                .await?
+                .json()
+                .await?;
+            value["data"]
+                .as_array()
+                .and_then(|a| a.iter().find(|v| v["id"] == model))
+                .cloned()
+                .unwrap_or(Value::Null)
+        };
+        Ok(image_capability(&value))
+    }
     async fn stream(&self, req: CompletionRequest) -> Result<TokenStream> {
-        let body = self.body(req, true)?;
+        self.stream_images(req, vec![]).await
+    }
+    async fn stream_images(
+        &self,
+        req: CompletionRequest,
+        images: Vec<String>,
+    ) -> Result<TokenStream> {
+        let mut body = self.body(req, true)?;
+        if !images.is_empty() {
+            let message = body["messages"]
+                .as_array_mut()
+                .and_then(|m| m.last_mut())
+                .ok_or_else(|| Error::Data("Missing image message".into()))?;
+            if self.kind == Kind::Ollama {
+                message["images"] = json!(images);
+            } else {
+                let text = message["content"].as_str().unwrap_or("").to_owned();
+                let mut content = vec![json!({"type":"text","text":text})];
+                for data in images {
+                    content.push(if self.kind==Kind::Anthropic {json!({"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":data}})} else {json!({"type":"image_url","image_url":{"url":format!("data:image/jpeg;base64,{data}")}})});
+                }
+                message["content"] = json!(content);
+            }
+        }
         let response = self
             .send(Method::POST, self.chat_path(), Some(&body))
             .await?;
@@ -406,4 +485,15 @@ fn parse_line(provider: &HttpProvider, bytes: &[u8]) -> Result<Option<String>> {
         return Err(Error::Data("Provider reported a streaming error".into()));
     }
     Ok(provider.delta(&value))
+}
+
+/// Use advertised metadata only, never guesses based on a model name.
+pub fn image_capability(value: &Value) -> bool {
+    value["capabilities"]
+        .as_array()
+        .is_some_and(|a| a.iter().any(|c| c == "vision" || c == "image"))
+        || value["capabilities"]["vision"] == true
+        || value["input_modalities"]
+            .as_array()
+            .is_some_and(|a| a.iter().any(|c| c == "image"))
 }

@@ -3,6 +3,7 @@ mod chat;
 mod people;
 mod session;
 mod setup;
+mod snapshots;
 mod workspace;
 
 use futures_util::StreamExt;
@@ -35,6 +36,7 @@ struct AppState {
     directory: PathBuf,
     capture: Mutex<Option<tokio::sync::mpsc::Sender<String>>>,
     clipboard: Mutex<Option<arboard::Clipboard>>,
+    snapshots: Mutex<snapshots::SnapshotSession>,
 }
 
 fn templates(s: &AppState) -> Result<Vec<talkkeeper_templates::Template>> {
@@ -193,6 +195,8 @@ async fn enhance_with_provider(
         max_tokens: Some(4096),
         temperature: None,
     };
+    let (images, image_context) =
+        snapshots::snapshot_context(state, note_id, provider, &model).await?;
     let prompt = match talkkeeper_templates::plan_enhancement(&template, &input, 12000) {
         talkkeeper_templates::EnhancePlan::Direct { system, user } => (system, user),
         talkkeeper_templates::EnhancePlan::MapReduce {
@@ -207,7 +211,12 @@ async fn enhance_with_provider(
             talkkeeper_templates::build_reduce_prompt(&reduce_template, &input, &summaries)
         }
     };
-    let mut stream = provider.stream(request(prompt)).await.map_err(err)?;
+    let (system, mut user) = prompt;
+    user.push_str(&image_context);
+    let mut stream = provider
+        .stream_images(request((system, user)), images)
+        .await
+        .map_err(err)?;
     let mut text = String::new();
     while let Some(delta) = stream.next().await {
         let delta = delta.map_err(err)?;
@@ -291,7 +300,7 @@ fn copy_text(state: &AppState, text: String) -> Result<()> {
 }
 
 fn preferences(store: &Store) -> Result<Value> {
-    let mut defaults = json!({"provider":"Automatic","base_url":"http://localhost:11434","language":"auto","stt_engine":"local","retention":30,"vocabulary":[],"notice":"I would like to record and transcribe this conversation for my notes. Does everyone consent?"});
+    let mut defaults = json!({"provider":"Automatic","base_url":"http://localhost:11434","language":"auto","stt_engine":"local","snapshots_preference":"Ask each time","snapshot_retention":30,"retention":30,"vocabulary":[],"notice":"I would like to record and transcribe this conversation for my notes. Does everyone consent?"});
     if let Some(saved) = store.get_setting("preferences").map_err(err)? {
         if let Some(values) = saved.as_object() {
             defaults.as_object_mut().unwrap().extend(values.clone());
@@ -323,6 +332,10 @@ fn validate_settings(payload: &Value) -> Result<()> {
                 ]
                 .contains(&value.as_str().unwrap_or("")) => {}
             "stt_engine" if ["local", "cloud"].contains(&value.as_str().unwrap_or("")) => {}
+            "snapshots_preference"
+                if ["Ask each time", "Always on", "Never"]
+                    .contains(&value.as_str().unwrap_or("")) => {}
+            "snapshot_retention" if value.as_u64().is_some_and(|n| n <= 36500) => {}
             "retention" if value.as_u64().is_some_and(|n| n <= 36500) => {}
             "vocabulary"
                 if value.as_array().is_some_and(|a| {
@@ -341,6 +354,9 @@ fn validate_settings(payload: &Value) -> Result<()> {
 fn data_inner(state: &AppState, action: String, payload: Value) -> Result<Value> {
     let mut store = state.store.lock().map_err(err)?;
     let id = || Uuid::parse_str(payload["id"].as_str().unwrap_or("")).map_err(err);
+    if action == "snapshots" || action.starts_with("snapshot_") {
+        return snapshots::data(&mut store, &action, payload);
+    }
     match action.as_str() {
         "people" => Ok(json!(store.list_people().map_err(err)?)),
         "companies" => Ok(json!(store.list_companies().map_err(err)?)),
@@ -555,11 +571,17 @@ fn main() {
                 .as_u64()
                 .unwrap_or(30);
             store.apply_transcript_retention(days.min(36500) as u32)?;
+            let snapshot_days = preferences(&store).map_err(std::io::Error::other)?
+                ["snapshot_retention"]
+                .as_u64()
+                .unwrap_or(30);
+            store.apply_snapshot_retention(snapshot_days.min(36500) as u32)?;
 
             app.manage(AppState {
                 store: Arc::new(Mutex::new(store)),
                 directory,
                 capture: Mutex::new(None),
+                snapshots: Mutex::new(snapshots::SnapshotSession::default()),
                 clipboard: Mutex::new(None),
             });
 
@@ -580,6 +602,8 @@ fn main() {
             chat::chat_note,
             list_models,
             download_model,
+            snapshots::snapshot_control,
+            snapshots::snapshot_ai_status,
             session::start_capture,
             session::pause_capture,
             session::resume_capture,
@@ -604,6 +628,7 @@ mod tests {
             store: Arc::new(Mutex::new(Store::open_in_memory().unwrap())),
             directory: std::env::temp_dir().join(Uuid::new_v4().to_string()),
             capture: Mutex::new(None),
+            snapshots: Mutex::new(snapshots::SnapshotSession::default()),
             clipboard: Mutex::new(None),
         }
     }

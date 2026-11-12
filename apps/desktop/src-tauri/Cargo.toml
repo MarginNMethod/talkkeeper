@@ -23,6 +23,9 @@ chrono = { workspace = true }
 tokio = { workspace = true, features = ["sync", "time"] }
 futures-util = "0.3"
 rfd = "0.15"
+xcap = "=0.0.14"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+base64 = "0.22"
 arboard = { version = "3", default-features = false }
 
 [features]
@@ -31,4 +34,8 @@ custom-protocol = ["tauri/custom-protocol"]
 macos-system-audio = ["talkkeeper-audio/macos-screencapture"]
 
 [dev-dependencies]
+tempfile = "3"
 async-trait = "0.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+xcb = "1.4"

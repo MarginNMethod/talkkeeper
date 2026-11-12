@@ -17,6 +17,7 @@ import { People, Attendees, type Person } from "./People";
 import { WorkspaceChat } from "./WorkspaceChat";
 import { Chat } from "./Chat";
 import { CopyTranscript } from "./CopyTranscript";
+import { SnapshotControls, SnapshotGallery } from "./Snapshots";
 import { Summary } from "./Summary";
 export function App() {
   const [notes, setNotes] = useState<Note[]>([]),
@@ -213,6 +214,8 @@ export function App() {
     await refresh();
   }
   return (
+    <>
+      <SnapshotControls noteId={captureNote} status={status} onError={fail} />
     <main>
       <aside className="sidebar">
         <h1>TalkKeeper</h1>
@@ -577,6 +580,10 @@ export function App() {
                 </div>
               )}
             </div>
+            <SnapshotGallery key={note.id} noteId={note.id} onError={fail} onSeek={(ms) => {
+              const segment = [...segments].reverse().find((s) => s.start_ms <= ms) ?? segments[0];
+              if (segment) document.getElementById(`segment-${segment.seq}`)?.scrollIntoView?.({ behavior: "smooth" });
+            }} />
             <div className="columns">
               <div>
                 <h2>Your notes</h2>
@@ -675,5 +682,6 @@ export function App() {
         )}
       </div>
     </main>
+    </>
   );
 }

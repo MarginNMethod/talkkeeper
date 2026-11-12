@@ -35,8 +35,13 @@ Implemented: workspace chat with scoped FTS retrieval, linked sources, persisted
 chats, text attachments, and reusable prompt recipes with JSON sharing and saved
 results. PDF context accepts exported text, not binary PDF parsing.
 
-Remaining: people and companies
-directory; shared-screen snapshots; voice typing.
+Shared-screen snapshots are implemented with per-meeting consent, window/display
+selection, local JPEG storage, change detection and bounded capture, gallery controls,
+retention, and metadata-gated image context with separate cloud consent. macOS uses
+CoreGraphics without a Swift build. Wayland capture and optional local image-to-text
+descriptions remain future work.
+
+Remaining: voice typing.
 
 People and companies are implemented with local attendee-derived profiles,
 manual editing, duplicate merge/undo, meeting histories, suggestions, and optional
