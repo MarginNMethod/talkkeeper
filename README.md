@@ -13,6 +13,25 @@ Windows are covered by automated builds and tests but need hands-on testing. Dow
 for macOS, Windows, and Linux and calendar links are planned next (see the roadmap). There
 are no plans for mobile apps or app-store releases. Expect rough edges.
 
+## Download
+
+Installers for macOS, Windows, and Linux are published on the
+[Releases page](../../releases) once a version is released. TalkKeeper is not in any app store.
+
+The builds are **unsigned** (code-signing certificates cost money and need developer accounts),
+so your system will warn you the first time:
+
+- **macOS:** drag TalkKeeper to Applications, then right-click it and choose **Open**, then **Open**
+  again. If macOS says the app is damaged, run
+  `xattr -dr com.apple.quarantine /Applications/TalkKeeper.app` once in Terminal.
+- **Windows:** if SmartScreen says "Windows protected your PC", choose **More info**, then
+  **Run anyway**.
+- **Linux:** use the `.AppImage` (make it executable with `chmod +x`, then run it) or install the
+  `.deb`/`.rpm` with your package manager.
+
+Only download installers from this repository's Releases page, and compare against the source
+if you want to be sure. The AI model and speech model are downloaded on first run, not bundled.
+
 ## First run
 
 Open TalkKeeper and choose **Set up automatically**. Before downloading, the app
