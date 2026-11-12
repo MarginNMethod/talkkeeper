@@ -28,10 +28,29 @@ pub struct Store {
 impl Store {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
-        let mut store = Self::initialize(Connection::open(path)?)?;
+        let conn = Connection::open(path)?;
+        conn.busy_timeout(Duration::from_secs(5))?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        let mut store = Self::initialize(conn)?;
         store.snapshot_directory = Some(path.parent().unwrap_or(Path::new(".")).join("snapshots"));
         store.cleanup_snapshot_files()?;
         Ok(store)
+    }
+    /// Opens existing data without migrations, cleanup, or any writable fallback.
+    pub fn open_read_only(path: impl AsRef<Path>) -> Result<Self> {
+        let conn = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        conn.busy_timeout(Duration::from_secs(5))?;
+        conn.pragma_update(None, "query_only", true)?;
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        if version != 7 {
+            return Err(Error::Invalid(
+                "database schema mismatch; update TalkKeeper and its MCP binary, then open the app",
+            ));
+        }
+        Ok(Self {
+            conn,
+            snapshot_directory: None,
+        })
     }
     pub fn open_in_memory() -> Result<Self> {
         Self::initialize(Connection::open_in_memory()?)
@@ -506,8 +525,46 @@ impl Store {
         filters: &SearchFilters,
         limit: usize,
     ) -> Result<Vec<SearchHit>> {
-        let mut stmt=self.conn.prepare("SELECT note_id,snippet(note_search,-1,'[',']',' … ',24),bm25(note_search) FROM note_search WHERE note_search MATCH ? ORDER BY bm25(note_search),note_id")?;
-        let rows = stmt.query_map([query], |r| {
+        self.search_columns(query, filters, limit, -1)
+    }
+    /// Restricts FTS matching and snippets to explicitly permitted columns.
+    pub fn search_mcp(
+        &self,
+        query: &str,
+        filters: &SearchFilters,
+        limit: usize,
+        transcripts: bool,
+    ) -> Result<Vec<SearchHit>> {
+        let terms = query
+            .split_whitespace()
+            .take(32)
+            .map(|s| format!("\"{}\"", s.replace('"', "\"\"")))
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        if terms.is_empty() {
+            return Ok(vec![]);
+        }
+        let columns = if transcripts {
+            "title notes summary transcript attendees"
+        } else {
+            "title notes summary attendees"
+        };
+        self.search_columns(
+            &format!("{{{columns}}} : ({terms})"),
+            filters,
+            limit,
+            if transcripts { -1 } else { 2 },
+        )
+    }
+    fn search_columns(
+        &self,
+        query: &str,
+        filters: &SearchFilters,
+        limit: usize,
+        snippet_column: i64,
+    ) -> Result<Vec<SearchHit>> {
+        let mut stmt=self.conn.prepare("SELECT note_id,snippet(note_search,?2,'[',']',' … ',24),bm25(note_search) FROM note_search WHERE note_search MATCH ?1 ORDER BY bm25(note_search),note_id")?;
+        let rows = stmt.query_map(params![query, snippet_column], |r| {
             Ok((
                 r.get::<_, String>(0)?,
                 r.get::<_, String>(1)?,
@@ -521,6 +578,9 @@ impl Store {
             }
             let (id, snippet, rank) = row?;
             let note = get_note(&self.conn, parse_id(&id)?)?.ok_or(Error::NotFound)?;
+            if note.deleted_at.is_some() {
+                continue;
+            }
             if filters
                 .folder_id
                 .is_some_and(|id| note.folder_id != Some(id))

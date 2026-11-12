@@ -152,3 +152,36 @@ Only after obtaining consent, enable automatic capture and verify the persistent
 indicator and Stop action when the meeting begins. Neither option is on by default.
 Embedded custom VTIMEZONE DST transitions have a synthetic regression fixture.
 Native OS notifications remain unsupported; reminders appear within the app.
+
+## Local MCP: real macOS and Windows client checks
+
+1. Download the app and matching MCP asset. On a real Mac (Apple Silicon and Intel
+   where available), make the binary executable; on Windows use the matching exe.
+   Run the app, create a note with attendees, transcript and summary, and trash a
+   second note. Add a calendar source and a linked note.
+2. In Settings, verify all MCP switches start off and the cloud privacy warning is
+   visible. Install the executable at a stable path, reopen Settings, and check
+   discovered paths or replace the explicit placeholder. Test should report disabled.
+3. Configure a real Claude Desktop, Claude Code or Cursor client using the copied
+   snippet. On Windows verify JSON escaping and the PowerShell command with spaces
+   in paths; on macOS verify Application Support database discovery. The client
+   must launch the process without a listener or a separately started server.
+4. Verify tools/list works while off and every tool call is denied. Enable notes
+   and repeat without restarting the client: search, list, read, folders and people
+   work. Trashed notes and transcript-only matches stay absent; transcript/calendar
+   tools explain their separate gates. Calendar-linked titles/people remain private.
+5. Enable transcripts, query a time range and search transcript words. Enable calendar
+   sharing and check cached event title/time/names/join URL, without subscription
+   links. Toggle each switch off and confirm the next read is denied or redacted.
+6. Edit/save notes while the client reads; verify latest committed content and no
+   database lock errors. Check long notes/segments have truncation guidance. Ask the
+   client to treat note content as untrusted data, including embedded instructions.
+7. Refresh Recent access: time/tool only, no query/content. Clear and refresh again.
+   Restart TalkKeeper and verify switch persistence. `talkkeeper-mcp --check` should
+   show the same readiness words as Settings. A wrong --db path must fail without
+   creating a database. Check release assets for each OS/architecture.
+
+These native-client checks require real machines and are not replaced by mockIPC
+browser tests. Automated stdio integration tests cover the actual Rust binary,
+read-only writes, file stability, schema refusal, privacy, limits, malformed input,
+rotation and WAL reads while an app writer holds a transaction.

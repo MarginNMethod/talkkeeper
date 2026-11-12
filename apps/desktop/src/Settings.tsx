@@ -1,3 +1,4 @@
+import { McpSettings } from "./McpSettings";
 import { CalendarSettings } from "./Calendar";
 import { DictationSettings } from "./Dictation";
 import { useEffect, useState } from "react";
@@ -42,6 +43,7 @@ export function Settings({
   return (
     <section className="settings">
       <h2>Settings</h2>
+      <McpSettings onError={onError} />
       <CalendarSettings onError={onError} prefs={prefs} onChange={field} />
       <DictationSettings prefs={prefs} />
       <p>

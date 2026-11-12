@@ -1,4 +1,6 @@
 let calendarAdded = false;
+const mcpPreferences: Record<string, boolean> = { enabled: false, include_transcripts: false, include_calendar: false };
+let mcpAccess = [{ timestamp: "2026-11-12T10:00:00Z", tool: "search_notes" }];
 import { mockIPC } from "@tauri-apps/api/mocks";
 let chat: Record<string, unknown>[] = [];
 let versions: Record<string, unknown>[] = [];
@@ -39,6 +41,14 @@ mockIPC(async (command, args) => {
     return 1;
   }
   if (command === "plugin:event|unlisten") return;
+  if (command === "mcp_data") {
+    const p = a.payload as { key: string; value: boolean };
+    if (a.action === "status") return structuredClone({ preferences: mcpPreferences, executable: "/opt/TalkKeeper/talkkeeper-mcp", database: "/data/talkkeeper.sqlite" });
+    if (a.action === "set") { mcpPreferences[p.key] = p.value; return; }
+    if (a.action === "recent") return structuredClone(mcpAccess);
+    if (a.action === "clear") { mcpAccess = []; return; }
+    if (a.action === "check") return mcpPreferences.enabled ? "Ready. Notes can be read by connected tools." : "Turn on 'Connect other AI tools' in TalkKeeper settings";
+  }
   if (command === "dictation_data") {
     const p = a.payload as Record<string, unknown>;
     if (a.action === "settings") return structuredClone(dictationConfig);
@@ -275,6 +285,7 @@ mockIPC(async (command, args) => {
       case "versions":
         return structuredClone(versions);
       case "copy_text":
+        (window as unknown as { copiedText: string }).copiedText = String(p.text);
         return null;
       case "apply_revision":
         versions.unshift({

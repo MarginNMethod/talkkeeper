@@ -102,3 +102,20 @@ context is checked in native code before rendering the template. It defaults off
 The same metadata exclusion applies to note chat, workspace retrieval, and directory
 summaries, including when sources are disabled or an event has aged out of the cache.
 User-written notes, transcripts, and previously generated summaries remain note content.
+
+## Local MCP reads
+
+`talkkeeper-mcp` is a separate client-launched stdio binary using the official
+Apache-2.0 `rmcp` SDK. A bounded framing bridge supplies plain errors without
+logging request bodies. No network transport is enabled. Every call opens core's
+read-only SQLite connection, checks exact schema 7 without migrations or cleanup,
+and re-reads the three `mcp.*` Settings gates. Desktop database opens select WAL,
+with a busy timeout, so app saves and external reads can coexist.
+
+Only explicit output projections reach clients. FTS column filters exclude
+transcripts by default; calendar-derived metadata is separately suppressed.
+Content and result bounds apply before serialization; all meeting output carries
+an untrusted-data warning. A cross-process file lock serializes rotating,
+content-free JSON access logs beside the database. Desktop controls use a narrow
+IPC command for immediate independent settings, path discovery, shared readiness
+checks, and log display/clearing. See [MCP privacy and configuration](mcp.md).

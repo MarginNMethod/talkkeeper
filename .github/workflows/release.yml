@@ -128,3 +128,63 @@ jobs:
             target/**/release/bundle/appimage/*.AppImage
           if-no-files-found: error
           retention-days: 7
+
+  # Independent job: MCP failures cannot hide or prevent app installer uploads.
+  mcp:
+    needs: check-version
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            asset: macos-aarch64
+            suffix: ""
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            asset: macos-x86_64
+            suffix: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset: windows-x86_64
+            suffix: ".exe"
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            asset: linux-x86_64
+            suffix: ""
+    runs-on: ${{ matrix.os }}
+    name: MCP ${{ matrix.asset }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          key: mcp-${{ matrix.target }}
+      - name: Build MCP binary
+        shell: bash
+        run: cargo build --release -p talkkeeper-mcp --target ${{ matrix.target }}
+      - name: Name MCP asset
+        shell: bash
+        run: |
+          mkdir -p mcp-dist
+          cp "target/${{ matrix.target }}/release/talkkeeper-mcp${{ matrix.suffix }}" "mcp-dist/talkkeeper-mcp-${{ matrix.asset }}${{ matrix.suffix }}"
+      - name: Keep MCP workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: talkkeeper-mcp-${{ matrix.asset }}
+          path: mcp-dist/*
+          if-no-files-found: error
+          retention-days: 7
+      - name: Attach MCP to draft release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Creation can race with the installer job or another architecture.
+          gh release view "$GITHUB_REF_NAME" || gh release create "$GITHUB_REF_NAME" --draft --prerelease --title "TalkKeeper $GITHUB_REF_NAME" || gh release view "$GITHUB_REF_NAME"
+          gh release upload "$GITHUB_REF_NAME" mcp-dist/* --clobber
