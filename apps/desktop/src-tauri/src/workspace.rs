@@ -148,7 +148,13 @@ async fn ask_with_provider(
         // Recipes may interpolate the same source array into their prompt.
         // Reserve half the retrieval budget for that second representation.
         let budget = if recipe.is_some() { 6000 } else { 12000 };
-        let retrieval = store.retrieve(&chat.scope, &search, budget).map_err(err)?;
+        let mut retrieval = store.retrieve(&chat.scope, &search, budget).map_err(err)?;
+        let allow = preferences(&store)?["calendar_details"] == true;
+        for source in &mut retrieval.sources {
+            if let Some(note) = store.get_note(source.note_id).map_err(err)? {
+                source.title = store.calendar_safe_note(note, allow).map_err(err)?.title;
+            }
+        }
         let context = serde_json::to_string(&retrieval.sources).map_err(err)?;
         let prompt = recipe.map_or_else(|| question.clone(), |r| r.render(&context, &topic));
         (chat, retrieval, prompt)

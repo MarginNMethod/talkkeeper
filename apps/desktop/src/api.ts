@@ -32,6 +32,10 @@ export interface Template {
   built_in: boolean;
 }
 export interface Preferences {
+  calendar_details?: boolean;
+  calendar_email?: string;
+  calendar_reminders?: boolean;
+  calendar_auto_capture?: boolean;
   snapshots_preference?: string;
   snapshot_retention?: number;
   provider?: string;

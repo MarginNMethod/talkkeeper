@@ -16,6 +16,7 @@ describes the desktop core and the boundaries for future features.
 | `crates/setup` | Hardware recommendations, verified engine installation, managed runtime lifecycle |
 | `crates/llm` | Language model provider adapters |
 | `crates/templates` | Note template definitions and rendering |
+| `crates/calendar` | Bounded ICS parsing/recurrence, timezone mapping, conditional HTTP fetching |
 | `crates/mcp` | Local MCP server |
 | `crates/integrations` | Future external service adapters |
 
@@ -76,3 +77,28 @@ the saved model and active port, rather than relying on a model constant. On lat
 launches a completed setup attaches/starts in the background without downloading.
 The managed runtime owner stops its child on application exit; existing user engines
 remain running. See `crates/setup/README.md` for download hosts and integrity policy.
+
+## Calendar cache and scheduling
+
+Migration 007 adds source metadata, concrete event instances, and note links.
+Deleting a source clears its events and links but preserves notes and people.
+Subscription addresses resolve from the shared LLM `SecretStore` trait using
+`calendar/<source UUID>` keychain entries; commands never return these addresses.
+The HTTP client has a 20-second timeout, three-redirect limit and 5 MiB streaming
+limit. Errors use fixed descriptions without request URLs. HTTP links show a warning.
+
+The desktop refresh task runs outside UI commands, at launch and on a minute poll
+against each source's configurable 5–120 minute interval. A local ICS cache permits
+rolling expansion on 304 responses and for imported files. Concrete instances cover
+one day back through 120 days ahead. Expansion uses `ical` (Apache-2.0) and `rrule`
+(MIT/Apache-2.0), caps each set at 4096 occurrences, applies recurrence exceptions,
+and converts IANA, mapped Windows zones, and embedded VTIMEZONE transitions
+with DST. Unknown zones without a usable definition fail explicitly. The last good cache remains available when refresh fails.
+
+Reminder banners run while the frontend is open. Reminders never start recording.
+A separate automatic-capture preference is off by default and explains consent;
+active capture has a persistent indicator and Stop control. Calendar enhancement
+context is checked in native code before rendering the template. It defaults off.
+The same metadata exclusion applies to note chat, workspace retrieval, and directory
+summaries, including when sources are disabled or an event has aged out of the cache.
+User-written notes, transcripts, and previously generated summaries remain note content.

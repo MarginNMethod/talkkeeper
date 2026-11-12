@@ -49,6 +49,9 @@ pub async fn run(
             .get_note(note_id)
             .map_err(err)?
             .ok_or("Note not found")?;
+        let note = store
+            .calendar_safe_note(note, preferences(&store)?["calendar_details"] == true)
+            .map_err(err)?;
         let all = store.list_transcript_segments(note_id).map_err(err)?;
         if all.is_empty() {
             return Err("This note has no transcript yet.".into());

@@ -1,3 +1,4 @@
+import { CalendarSettings } from "./Calendar";
 import { DictationSettings } from "./Dictation";
 import { useEffect, useState } from "react";
 import { data, invoke, type Preferences } from "./api";
@@ -41,6 +42,7 @@ export function Settings({
   return (
     <section className="settings">
       <h2>Settings</h2>
+      <CalendarSettings onError={onError} prefs={prefs} onChange={field} />
       <DictationSettings prefs={prefs} />
       <p>
         Cloud providers send notes or audio to the endpoint you select. Local
