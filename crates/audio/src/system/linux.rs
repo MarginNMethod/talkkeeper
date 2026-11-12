@@ -93,10 +93,8 @@ impl SystemAudioSource for NativeSource {
                     output.send(Source::System, 48000, 2, &vec![0.; bytes / 4])
                 }
                 PeekResult::Data(bytes) => {
-                    let samples: Vec<_> = bytes
-                        .chunks_exact(4)
-                        .map(|b| f32::from_ne_bytes(b.try_into().unwrap()))
-                        .collect();
+                    let (chunks, _) = bytes.as_chunks::<4>();
+                    let samples: Vec<f32> = chunks.iter().map(|b| f32::from_ne_bytes(*b)).collect();
                     output.send(Source::System, 48000, 2, &samples);
                 }
             }

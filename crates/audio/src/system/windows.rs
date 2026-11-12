@@ -56,10 +56,8 @@ impl SystemAudioSource for NativeSource {
             }
             let mut bytes = vec![0; frames as usize * 8];
             let (read, _) = self.capture.read_from_device(&mut bytes).map_err(backend)?;
-            let samples: Vec<_> = bytes[..read as usize * 8]
-                .chunks_exact(4)
-                .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
-                .collect();
+            let (chunks, _) = bytes[..read as usize * 8].as_chunks::<4>();
+            let samples: Vec<f32> = chunks.iter().map(|b| f32::from_le_bytes(*b)).collect();
             output.send(Source::System, 48000, 2, &samples);
         }
         Ok(())
