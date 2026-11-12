@@ -1,0 +1,77 @@
+[
+  {
+    "tier": "compact",
+    "min_ram_gb": 0,
+    "llm": {
+      "ollama_tag": "qwen3.5:2b",
+      "friendly_name": "Compact conversation AI",
+      "approx_download_gb": 2.7,
+      "license": "Apache-2.0",
+      "notes": "Open model weights. Download sizes are estimates; speed depends on available memory and graphics hardware."
+    },
+    "whisper": {
+      "model": "tiny",
+      "approx_download_mb": 77.7
+    }
+  },
+  {
+    "tier": "everyday",
+    "min_ram_gb": 8,
+    "llm": {
+      "ollama_tag": "qwen3.5:4b",
+      "friendly_name": "Everyday conversation AI",
+      "approx_download_gb": 3.4,
+      "license": "Apache-2.0",
+      "notes": "Open model weights. Download sizes are estimates; speed depends on available memory and graphics hardware."
+    },
+    "whisper": {
+      "model": "small",
+      "approx_download_mb": 487.6
+    }
+  },
+  {
+    "tier": "roomy",
+    "min_ram_gb": 16,
+    "llm": {
+      "ollama_tag": "qwen3.5:9b",
+      "friendly_name": "Detailed conversation AI",
+      "approx_download_gb": 6.6,
+      "license": "Apache-2.0",
+      "notes": "Open model weights. Download sizes are estimates; speed depends on available memory and graphics hardware."
+    },
+    "whisper": {
+      "model": "large-v3-turbo",
+      "approx_download_mb": 1624.6
+    }
+  },
+  {
+    "tier": "spacious",
+    "min_ram_gb": 32,
+    "llm": {
+      "ollama_tag": "qwen3.5:27b",
+      "friendly_name": "Extended conversation AI",
+      "approx_download_gb": 17,
+      "license": "Apache-2.0",
+      "notes": "Open model weights. Download sizes are estimates; speed depends on available memory and graphics hardware."
+    },
+    "whisper": {
+      "model": "large-v3-turbo",
+      "approx_download_mb": 1624.6
+    }
+  },
+  {
+    "tier": "expansive",
+    "min_ram_gb": 64,
+    "llm": {
+      "ollama_tag": "qwen3.6:35b",
+      "friendly_name": "Full conversation AI",
+      "approx_download_gb": 24,
+      "license": "See the model page on ollama.com for license terms",
+      "notes": "Open model weights. Download sizes are estimates; speed depends on available memory and graphics hardware."
+    },
+    "whisper": {
+      "model": "large-v3-turbo",
+      "approx_download_mb": 1624.6
+    }
+  }
+]
