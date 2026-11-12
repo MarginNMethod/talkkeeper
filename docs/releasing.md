@@ -12,12 +12,18 @@ published.
 ## Publish a version
 
 1. Set the same version in `apps/desktop/src-tauri/tauri.conf.json`, the root `Cargo.toml`
-   (`[workspace.package]`), and `apps/desktop/package.json`, and merge that change.
+   (`[workspace.package]`), `apps/desktop/package.json`, and the other `package.json` files,
+   and merge that change.
 2. Tag the merge commit and push the tag: `git tag v0.1.0 && git push origin v0.1.0`.
-   The workflow checks that the tag matches the app version.
-3. The workflow creates a **draft pre-release** with the installers attached. Only maintainers
-   can see a draft. Download and try the installers, edit the release notes, then press
+   The workflow checks that the tag matches the app version. (A pushed tag is visible to
+   everyone even while the release itself is a draft.)
+3. One job creates a single **draft pre-release**; the build jobs then add the installers
+   and the `talkkeeper-mcp` program for each system to it. Only maintainers can see a draft.
+4. Download and try the installers on real machines, edit the release notes, then press
    **Publish release** when you are happy.
+
+If a tag build fails, fix the problem, delete the draft release and the tag
+(`git push origin :refs/tags/v0.1.0`), and tag again.
 
 ## Notes
 
