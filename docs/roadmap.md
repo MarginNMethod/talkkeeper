@@ -22,9 +22,20 @@ managed Ollama installation and supervision, verified speech downloads, progress
 cancel/retry, and Advanced provider settings. Local AI becomes ready without a
 terminal or API key. Catalog refresh remains off and is not implemented.
 
+
+## Phase 1.5 — Per-note conversations
+
+Copy whole transcripts, ask cited questions about a note, and preview chat revisions
+or redo notes with extra instructions. Apply saves the previous summary for Undo
+and version restore. Multi-note and folder chat remain Phase 2.
+
 ## Phase 2: Working with notes
 
-Chat over notes with citations; reusable prompt recipes; people and companies
+Implemented: workspace chat with scoped FTS retrieval, linked sources, persisted
+chats, text attachments, and reusable prompt recipes with JSON sharing and saved
+results. PDF context accepts exported text, not binary PDF parsing.
+
+Remaining: people and companies
 directory; shared-screen snapshots; voice typing.
 
 People and companies are implemented with local attendee-derived profiles,

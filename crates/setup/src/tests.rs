@@ -86,6 +86,7 @@ async fn archive_to_running_engine_to_speech_and_idempotent_retry() {
         .await
         .unwrap();
     assert!(stages.lock().unwrap().contains(&Stage::Verify));
+    assert!(stages.lock().unwrap().contains(&Stage::DownloadSpeechModel));
     let base = runtime.base_url.clone();
     drop(runtime);
     for _ in 0..40 {
@@ -160,4 +161,18 @@ async fn blocked_download_reports_fix_and_can_retry() {
             .await
             .unwrap(),
     );
+}
+
+#[test]
+fn bundled_speech_tiers_are_multilingual() {
+    let catalog = Catalog::bundled().unwrap();
+    for tier in catalog.0 {
+        assert!(!tier.whisper.model.ends_with(".en"));
+        let expected = match tier.min_ram_gb {
+            0 => "tiny",
+            8 => "small",
+            _ => "large-v3-turbo",
+        };
+        assert_eq!(tier.whisper.model, expected);
+    }
 }

@@ -1,5 +1,22 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
+let chat: Record<string, unknown>[] = [];
+let versions: Record<string, unknown>[] = [];
 let notes: Record<string, unknown>[] = [];
+let chats: Record<string, unknown>[] = [];
+const recipes = [
+  {
+    id: "recipe-1",
+    name: "Draft a follow-up message",
+    description: "Draft agreed actions",
+    prompt: "garden",
+    default_scope: {
+      note_ids: null,
+      folder_id: null,
+      date_from: null,
+      date_to: null,
+    },
+  },
+];
 const firstRun = new URLSearchParams(location.search).has("setup");
 let setupDone = !firstRun;
 let setupAttempts = 0;
@@ -55,6 +72,7 @@ mockIPC(async (command, args) => {
           message: "Downloading your AI model",
         },
       });
+
     if (new URLSearchParams(location.search).has("hold")) {
       await new Promise<void>((resolve) => {
         (window as unknown as { finishSetup: () => void }).finishSetup =
@@ -64,8 +82,32 @@ mockIPC(async (command, args) => {
     setupDone = true;
     return;
   }
+  if (command === "chat_note") {
+    const message = {
+      id: "chat-1",
+      role: "assistant",
+      content: "Garden plan [#12]",
+      revision: "Garden plan [#12]",
+      proposed_edit_id: "edit-1",
+    };
+    for (const handler of listeners["chat://delta"] ?? [])
+      (
+        window as unknown as {
+          __TAURI_INTERNALS__: {
+            runCallback: (id: number, arg: unknown) => void;
+          };
+        }
+      ).__TAURI_INTERNALS__.runCallback(handler, {
+        event: "chat://delta",
+        id: 1,
+        payload: { note_id: a.noteId, delta: message.content },
+      });
+    chat.push(message);
+    return message;
+  }
   if (command === "enhance_note") {
     const text = "## Decisions\nProceed with the garden plan.";
+
     for (const handler of listeners["enhance://delta"] ?? [])
       (
         window as unknown as {
@@ -78,8 +120,40 @@ mockIPC(async (command, args) => {
         id: 1,
         payload: { note_id: a.noteId, delta: text },
       });
+
     notes[0].summary_markdown = text;
     return { text, citations: [] };
+  }
+  if (command === "ask_workspace") {
+    const chat = chats.find((c) => c.id === a.chatId)!;
+    const sources = notes.slice(0, 2).map((n) => ({
+      note_id: n.id,
+      title: n.title,
+      seq: 1,
+      start_ms: 90000,
+      text: "garden approved",
+    }));
+    const text = "Garden approved [S1]";
+    for (const handler of listeners["workspace://delta"] ?? [])
+      (
+        window as unknown as {
+          __TAURI_INTERNALS__: {
+            runCallback: (id: number, arg: unknown) => void;
+          };
+        }
+      ).__TAURI_INTERNALS__.runCallback(handler, {
+        event: "workspace://delta",
+        id: 1,
+        payload: { chat_id: chat.id, delta: text },
+      });
+    chat.messages = [
+      {
+        role: "assistant",
+        text,
+        retrieval: { notes_searched: 2, segments_searched: 2, sources },
+      },
+    ];
+    return structuredClone(chat);
   }
   if (command === "data") {
     const p = a.payload as Record<string, unknown>;
@@ -112,6 +186,58 @@ mockIPC(async (command, args) => {
             ),
           ),
         );
+      case "workspace_chats":
+        return structuredClone(chats);
+      case "recipes":
+        return structuredClone(recipes);
+      case "save_workspace_chat":
+        chats = [structuredClone(p), ...chats.filter((c) => c.id !== p.id)];
+        return structuredClone(p);
+      case "delete_workspace_chat":
+        chats = chats.filter((c) => c.id !== p.id);
+        return;
+      case "get":
+        return structuredClone(notes.find((n) => n.id === p.id));
+      case "save_workspace_result": {
+        const chat = chats.find((c) => c.id === p.id)!;
+        const n = {
+          ...structuredClone(notes[0]),
+          id: `note-${notes.length + 1}`,
+          title: "Recipe result",
+          notes_doc: null,
+          notes_markdown: (chat.messages as { text: string }[])[0].text,
+        };
+        notes.push(n);
+        return structuredClone(n);
+      }
+      case "chat_history":
+        return chat;
+      case "versions":
+        return versions;
+      case "copy_text":
+        return null;
+      case "apply_revision":
+        versions.unshift({
+          id: "version-1",
+          content: notes[0].summary_markdown,
+          created_at: new Date().toISOString(),
+        });
+        notes[0].summary_markdown = "Garden plan [#12]";
+        chat = chat.map((m) => ({
+          ...m,
+          revision: null,
+          proposed_edit_id: null,
+        }));
+        return { ...notes[0] };
+      case "discard_revision":
+        chat = [];
+        return { ...notes[0] };
+      case "restore_summary":
+        notes[0].summary_markdown = versions[0].content;
+        return { ...notes[0] };
+      case "clear_chat":
+        chat = [];
+        return null;
       case "settings":
         return { provider: "Ollama" };
       case "speech_models":
@@ -121,8 +247,26 @@ mockIPC(async (command, args) => {
       case "templates":
         return [{ id: "auto", name: "Auto" }];
       case "folders":
-      case "segments":
         return [];
+      case "segments":
+        return [
+          {
+            id: "s1",
+            note_id: p.id,
+            seq: 1,
+            start_ms: 90000,
+            speaker: "Me",
+            text: "garden approved",
+          },
+          {
+            id: "seg-12",
+            note_id: "note-1",
+            seq: 12,
+            start_ms: 65000,
+            speaker: "Me",
+            text: "Proceed with the garden plan.",
+          },
+        ];
       case "start_note": {
         const n = {
           id: `note-${notes.length + 1}`,

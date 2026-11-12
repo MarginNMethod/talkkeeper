@@ -20,7 +20,7 @@ export interface Segment {
   note_id: string;
   seq: number;
   start_ms: number;
-  speaker: string;
+  speaker: string | { Named: string };
   text: string;
 }
 export interface Template {

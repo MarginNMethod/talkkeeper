@@ -10,3 +10,5 @@ pub fn component_name() -> &'static str {
 
 mod directory;
 pub use directory::{Company, Person};
+mod workspace;
+pub use workspace::*;

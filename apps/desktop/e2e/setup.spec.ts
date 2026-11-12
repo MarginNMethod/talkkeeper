@@ -9,7 +9,7 @@ test("consent, sizes, progress, ready, and first note", async ({ page }) => {
   await expect(page.getByText(/6.8 GB/)).toBeVisible();
   await page.getByRole("button", { name: "Set up automatically" }).click();
   await expect(page.getByRole("progressbar")).toHaveAttribute("value", "50");
-  await page.evaluate(() => (window as unknown as {finishSetup: () => void}).finishSetup());
+  await page.evaluate(() => (window as unknown as { finishSetup: () => void }).finishSetup());
   await expect(page.getByRole("heading", { name: "You're ready" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Note title" })).toBeVisible();
 });

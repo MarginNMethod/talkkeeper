@@ -107,3 +107,21 @@ pub struct SearchHit {
     pub snippet: String,
     pub rank: f64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub id: Uuid,
+    pub note_id: Uuid,
+    pub role: String,
+    pub content: String,
+    pub created_at: DateTime<Utc>,
+    pub proposed_edit_id: Option<Uuid>,
+    pub revision: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SummaryVersion {
+    pub id: Uuid,
+    pub note_id: Uuid,
+    pub content: Option<String>,
+    pub created_at: DateTime<Utc>,
+}

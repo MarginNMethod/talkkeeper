@@ -14,6 +14,9 @@ import { Settings } from "./Settings";
 import { Templates } from "./Templates";
 import { Setup } from "./Setup";
 import { People, Attendees, type Person } from "./People";
+import { WorkspaceChat } from "./WorkspaceChat";
+import { Chat } from "./Chat";
+import { CopyTranscript } from "./CopyTranscript";
 import { Summary } from "./Summary";
 export function App() {
   const [notes, setNotes] = useState<Note[]>([]),
@@ -39,9 +42,15 @@ export function App() {
     null,
   );
   const [personId, setPersonId] = useState<string | undefined>();
+  const [workspaceChat, setWorkspaceChat] = useState(false);
+  const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
+  const [citationSeq, setCitationSeq] = useState<number | null>(null);
+  useEffect(() => { if (citationSeq !== null && !workspaceChat) document.getElementById(`segment-${citationSeq}`)?.scrollIntoView?.({ behavior: "smooth" }); }, [segments, workspaceChat, citationSeq]);
   const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null);
   useEffect(() => {
-    void invoke<{ completed: boolean; custom: boolean }>("setup_status").then((s) => setSetupNeeded(!s.completed && !s.custom)).catch(fail);
+    void invoke<{ completed: boolean; custom: boolean }>("setup_status")
+      .then((s) => setSetupNeeded(!s.completed && !s.custom))
+      .catch(fail);
   }, []);
   const current = useRef<Note | null>(null),
     saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
@@ -144,13 +153,15 @@ export function App() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null;
-      void persist(next);
+      // Always save the newest note, never a snapshot taken when the timer was set.
+      void persist(current.current ?? next);
     }, 400);
   }
 
   async function select(n: Note) {
     await flush();
     setDirectory(null);
+    setWorkspaceChat(false);
     setNote(n);
     setTemplate(n.template_id ?? "auto");
     setSegments(await data("segments", { id: n.id }));
@@ -205,7 +216,22 @@ export function App() {
     <main>
       <aside className="sidebar">
         <h1>TalkKeeper</h1>
-        <button disabled={setupNeeded !== false} onClick={() => void create().catch(fail)}>New note</button>
+        <button
+          disabled={setupNeeded !== false}
+          onClick={() =>
+            void flush()
+              .then(() => setWorkspaceChat(true))
+              .catch(fail)
+          }
+        >
+          Ask your notes
+        </button>
+        <button
+          disabled={setupNeeded !== false}
+          onClick={() => void create().catch(fail)}
+        >
+          New note
+        </button>
         <input
           aria-label="Search notes"
           placeholder="Search conversations"
@@ -299,6 +325,7 @@ export function App() {
             .filter((n) => !folder || n.folder_id === folder)
             .map((n, i, a) => (
               <div key={n.id}>
+                {!trash && <input type="checkbox" aria-label={`Select note ${n.title}`} checked={selectedNotes.includes(n.id)} onChange={(e) => setSelectedNotes((ids) => e.target.checked ? [...ids, n.id] : ids.filter((id) => id !== n.id))} />}
                 {(i === 0 ||
                   n.created_at.slice(0, 10) !==
                     a[i - 1].created_at.slice(0, 10)) && (
@@ -333,11 +360,50 @@ export function App() {
         {settings ? (
           <Settings
             initial={settings}
-            onClose={() => { setSettings(null); void invoke<{ completed: boolean; custom: boolean }>("setup_status").then((s) => setSetupNeeded(!s.completed && !s.custom)).catch(fail); }}
+            onClose={() => {
+              setSettings(null);
+              void invoke<{ completed: boolean; custom: boolean }>(
+                "setup_status",
+              )
+                .then((s) => setSetupNeeded(!s.completed && !s.custom))
+                .catch(fail);
+            }}
             onError={fail}
           />
         ) : setupNeeded !== false ? (
-          setupNeeded === null ? <p role="status">Checking setup…</p> : <Setup onReady={() => { setSetupNeeded(false); void create().catch(fail); }} onAdvanced={() => void data<Preferences>("settings").then((p) => setSettings({ ...p, provider: "Ollama" })).catch(fail)} />
+          setupNeeded === null ? (
+            <p role="status">Checking setup…</p>
+          ) : (
+            <Setup
+              onReady={() => {
+                setSetupNeeded(false);
+                void create().catch(fail);
+              }}
+              onAdvanced={() =>
+                void data<Preferences>("settings")
+                  .then((p) => setSettings({ ...p, provider: "Ollama" }))
+                  .catch(fail)
+              }
+            />
+          )
+        ) : workspaceChat ? (
+          <WorkspaceChat
+            selected={selectedNotes}
+            folders={folders}
+            onOpen={(id, seq) => {
+              setCitationSeq(seq);
+              void data<Note>("get", { id })
+                .then((n) => {
+                  if (!n || n.deleted_at)
+                    throw new Error("Source note is unavailable");
+                  return select(n);
+                })
+                .catch(fail);
+            }}
+            onSaved={(n) => {
+              void select(n).then(refresh).catch(fail);
+            }}
+          />
         ) : directory ? (
           <People
             key={directory + (personId ?? "")}
@@ -374,18 +440,18 @@ export function App() {
                   ? " · another note"
                   : ""}
               </span>
+              <CopyTranscript note={note} segments={segments} />
               <details>
                 <summary>Export</summary>
                 {[
                   ["summary", "Copy summary as Markdown"],
-                  ["transcript", "Copy transcript"],
                   ["markdown", "Export Markdown"],
                   ["transcript", "Export transcript"],
                   ["csv", "Export CSV"],
                 ].map(([format, label], i) => (
                   <button
                     key={label}
-                    onClick={() => void exportNote(format, i < 2).catch(fail)}
+                    onClick={() => void exportNote(format, i < 1).catch(fail)}
                   >
                     {label}
                   </button>
@@ -538,13 +604,13 @@ export function App() {
                     </select>
                   </label>
                   <button
-                    disabled={enhancing || trash}
+                    disabled={enhancing || trash || !!note.summary_markdown}
                     onClick={() => void enhance()}
                   >
                     {enhancing
                       ? "Enhancing…"
                       : note.summary_markdown
-                        ? "Regenerate"
+                        ? "Use Redo notes below"
                         : "Enhance"}
                   </button>
                 </div>
@@ -579,9 +645,25 @@ export function App() {
                     )
                     .catch(fail)
                 }
-                onCopy={() => void exportNote("transcript", true).catch(fail)}
+                onCopy={<CopyTranscript note={note} segments={segments} />}
               />
             </div>
+            <Chat
+              onSettings={() =>
+                void data<Preferences>("settings").then(setSettings).catch(fail)
+              }
+              key={note.id}
+              locked={enhancing}
+              note={note}
+              segments={segments}
+              beforeRequest={flush}
+              onNote={(n) => {
+                if (current.current?.id !== n.id) return;
+                current.current = n;
+                setNote(n);
+                void refresh().catch(fail);
+              }}
+            />
           </>
         ) : (
           <section className="empty">
