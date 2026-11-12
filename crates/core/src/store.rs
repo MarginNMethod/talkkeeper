@@ -22,7 +22,7 @@ pub enum Error {
 }
 
 pub struct Store {
-    conn: Connection,
+    pub(crate) conn: Connection,
 }
 impl Store {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -35,7 +35,7 @@ impl Store {
         conn.execute_batch("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;")?;
         let tx = conn.transaction()?;
         let version: i64 = tx.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version > 1 {
+        if version > 2 {
             return Err(Error::Invalid(
                 "database schema is newer than this application",
             ));
@@ -43,6 +43,11 @@ impl Store {
         if version == 0 {
             tx.execute_batch(include_str!("../migrations/001_initial.sql"))?;
             tx.pragma_update(None, "user_version", 1)?;
+        }
+        if version < 2 {
+            tx.execute_batch(include_str!("../migrations/002_workspace.sql"))?;
+            tx.pragma_update(None, "user_version", 2)?;
+            rebuild_search(&tx)?;
         }
         tx.commit()?;
         Ok(Self { conn })
@@ -507,10 +512,30 @@ fn attendees(n: &Note) -> String {
 }
 fn rebuild_search(tx: &Transaction<'_>) -> Result<()> {
     tx.execute("DELETE FROM note_search", [])?;
+    tx.execute("DELETE FROM workspace_search", [])?;
     for n in all_notes(tx)?
         .into_iter()
         .filter(|n| n.deleted_at.is_none())
     {
+        for s in segments(tx, n.id)? {
+            tx.execute(
+                "INSERT INTO workspace_search VALUES (?,?,?,?,?)",
+                params![n.id.to_string(), s.seq, s.start_ms, n.title, s.text],
+            )?;
+        }
+        for section in format!(
+            "{}\n{}",
+            n.notes_markdown,
+            n.summary_markdown.as_deref().unwrap_or("")
+        )
+        .split("\n\n")
+        .filter(|s| !s.trim().is_empty())
+        {
+            tx.execute(
+                "INSERT INTO workspace_search VALUES (?,?,?,?,?)",
+                params![n.id.to_string(), 0, 0, n.title, section],
+            )?;
+        }
         let transcript = segments(tx, n.id)?
             .iter()
             .map(|s| s.text.as_str())

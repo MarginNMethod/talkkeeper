@@ -6,7 +6,7 @@ meetings as a bot. Write rough notes alongside the transcript, then turn them in
 an AI-enhanced summary.
 
 **Status: desktop core with automatic local setup.** Capture, transcription, notes,
-summaries, and local storage are available; later roadmap features remain planned.
+summaries, workspace chat, reusable recipes, and local storage are available; later roadmap features remain planned.
 
 ## First run
 
@@ -19,6 +19,17 @@ a connection once; local processing works offline afterward. Low storage selects
 smaller model where possible. **Use my own AI provider instead** opens Advanced
 settings, where provider and model choices remain available. Select **Automatic**
 to return to the managed local AI after setup.
+
+## Ask your notes and Recipes
+
+Select notes in the sidebar, then open **Ask your notes**. Choose selected notes,
+a folder, a creation-date range, or all notes. Answers use local FTS retrieval
+with BM25 and a recency boost, display search counts, and link retrieved sources
+to their transcript timestamps. Chats and removable attachments stay in SQLite.
+Attach UTF-8 `.txt` or `.md` files (256 KiB each, up to eight); export PDFs as
+text using `.pdf.txt` first. Cloud providers receive the retrieved context when
+you ask. Recipes run only on demand, support `{{notes}}` and `{{topic}}`, and can
+be edited, duplicated, imported/exported as validated JSON, copied, or saved as notes.
 
 ## Recording consent
 

@@ -279,3 +279,9 @@ meter {
     flex-wrap: wrap;
   }
 }
+
+.workspace-chat { max-width: 960px; padding: 1.5rem; }
+.workspace-chat label { display: block; margin: .6rem 0; }
+.workspace-chat textarea { display: block; width: 100%; min-height: 6rem; }
+.workspace-chat article { padding: .8rem; border-bottom: 1px solid #8885; }
+.workspace-chat .pill { display: inline-block; margin: .2rem; }

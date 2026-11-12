@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod session;
 mod setup;
+mod workspace;
 
 use futures_util::StreamExt;
 
@@ -485,7 +486,7 @@ fn data_inner(state: &AppState, action: String, payload: Value) -> Result<Value>
             }
             Ok(json!(text))
         }
-        _ => Err("Unknown action".into()),
+        _ => workspace::data(&mut store, &action, payload),
     }
 }
 
@@ -516,6 +517,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             data,
+            workspace::ask_workspace,
             setup::setup_status,
             setup::setup_plan,
             setup::setup_run,

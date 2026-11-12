@@ -13,6 +13,7 @@ import { Transcript } from "./Transcript";
 import { Settings } from "./Settings";
 import { Templates } from "./Templates";
 import { Setup } from "./Setup";
+import { WorkspaceChat } from "./WorkspaceChat";
 import { Summary } from "./Summary";
 export function App() {
   const [notes, setNotes] = useState<Note[]>([]),
@@ -34,6 +35,10 @@ export function App() {
     [folders, setFolders] = useState<{ id: string; name: string }[]>([]),
     [folder, setFolder] = useState(""),
     [progress, setProgress] = useState("");
+  const [workspaceChat, setWorkspaceChat] = useState(false);
+  const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
+  const [citationSeq, setCitationSeq] = useState<number | null>(null);
+  useEffect(() => { if (citationSeq !== null && !workspaceChat) document.getElementById(`segment-${citationSeq}`)?.scrollIntoView?.({ behavior: "smooth" }); }, [segments, workspaceChat, citationSeq]);
   const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null);
   useEffect(() => {
     void invoke<{ completed: boolean; custom: boolean }>("setup_status").then((s) => setSetupNeeded(!s.completed && !s.custom)).catch(fail);
@@ -145,6 +150,7 @@ export function App() {
 
   async function select(n: Note) {
     await flush();
+    setWorkspaceChat(false);
     setNote(n);
     setTemplate(n.template_id ?? "auto");
     setSegments(await data("segments", { id: n.id }));
@@ -199,6 +205,7 @@ export function App() {
     <main>
       <aside className="sidebar">
         <h1>TalkKeeper</h1>
+        <button disabled={setupNeeded !== false} onClick={() => void flush().then(() => setWorkspaceChat(true)).catch(fail)}>Ask your notes</button>
         <button disabled={setupNeeded !== false} onClick={() => void create().catch(fail)}>New note</button>
         <input
           aria-label="Search notes"
@@ -271,6 +278,7 @@ export function App() {
             .filter((n) => !folder || n.folder_id === folder)
             .map((n, i, a) => (
               <div key={n.id}>
+                {!trash && <input type="checkbox" aria-label={`Select note ${n.title}`} checked={selectedNotes.includes(n.id)} onChange={(e) => setSelectedNotes((ids) => e.target.checked ? [...ids, n.id] : ids.filter((id) => id !== n.id))} />}
                 {(i === 0 ||
                   n.created_at.slice(0, 10) !==
                     a[i - 1].created_at.slice(0, 10)) && (
@@ -310,6 +318,8 @@ export function App() {
           />
         ) : setupNeeded !== false ? (
           setupNeeded === null ? <p role="status">Checking setup…</p> : <Setup onReady={() => { setSetupNeeded(false); void create().catch(fail); }} onAdvanced={() => void data<Preferences>("settings").then((p) => setSettings({ ...p, provider: "Ollama" })).catch(fail)} />
+        ) : workspaceChat ? (
+          <WorkspaceChat selected={selectedNotes} folders={folders} onOpen={(id, seq) => { setCitationSeq(seq); void data<Note>("get", { id }).then((n) => { if (!n || n.deleted_at) throw new Error("Source note is unavailable"); return select(n); }).catch(fail); }} onSaved={(n) => { void select(n).then(refresh).catch(fail); }} />
         ) : note ? (
           <>
             <header>

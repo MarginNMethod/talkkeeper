@@ -24,7 +24,11 @@ terminal or API key. Catalog refresh remains off and is not implemented.
 
 ## Phase 2: Working with notes
 
-Chat over notes with citations; reusable prompt recipes; people and companies
+Implemented: workspace chat with scoped FTS retrieval, linked sources, persisted
+chats, text attachments, and reusable prompt recipes with JSON sharing and saved
+results. PDF context accepts exported text, not binary PDF parsing.
+
+Remaining: people and companies
 directory; shared-screen snapshots; voice typing.
 
 ## Phase 3: Connected workflows

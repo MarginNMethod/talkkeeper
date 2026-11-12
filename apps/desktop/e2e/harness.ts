@@ -1,5 +1,20 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
 let notes: Record<string, unknown>[] = [];
+let chats: Record<string, unknown>[] = [];
+const recipes = [
+  {
+    id: "recipe-1",
+    name: "Draft a follow-up message",
+    description: "Draft agreed actions",
+    prompt: "garden",
+    default_scope: {
+      note_ids: null,
+      folder_id: null,
+      date_from: null,
+      date_to: null,
+    },
+  },
+];
 const firstRun = new URLSearchParams(location.search).has("setup");
 let setupDone = !firstRun;
 let setupAttempts = 0;
@@ -12,18 +27,62 @@ mockIPC(async (command, args) => {
     return 1;
   }
   if (command === "plugin:event|unlisten") return;
-  if (command === "setup_status") return { completed: setupDone, custom: false };
-  if (command === "setup_plan") return { llm: { friendly_name: "Compact conversation AI", approx_download_gb: 2.7, license: "Apache-2.0", notes: "Open model weights." }, whisper: { approx_download_mb: 78 }, total_download_bytes: 6.8e9, hardware: { os: "linux", total_ram_bytes: 8 * 2 ** 30, free_disk_bytes: 20e9 }, can_install: true };
+  if (command === "setup_status")
+    return { completed: setupDone, custom: false };
+  if (command === "setup_plan")
+    return {
+      llm: {
+        friendly_name: "Compact conversation AI",
+        approx_download_gb: 2.7,
+        license: "Apache-2.0",
+        notes: "Open model weights.",
+      },
+      whisper: { approx_download_mb: 78 },
+      total_download_bytes: 6.8e9,
+      hardware: {
+        os: "linux",
+        total_ram_bytes: 8 * 2 ** 30,
+        free_disk_bytes: 20e9,
+      },
+      can_install: true,
+    };
   if (command === "setup_run") {
-    if (new URLSearchParams(location.search).has("failure") && setupAttempts++ === 0) throw new Error("Check your connection and retry.");
+    if (
+      new URLSearchParams(location.search).has("failure") &&
+      setupAttempts++ === 0
+    )
+      throw new Error("Check your connection and retry.");
     for (const handler of listeners["setup://progress"] ?? [])
-      (window as unknown as { __TAURI_INTERNALS__: { runCallback: (id: number, arg: unknown) => void } }).__TAURI_INTERNALS__.runCallback(handler, { event: "setup://progress", id: 1, payload: { stage: "PullModel", completed: 50, total: 100, percent: 50, message: "Downloading your AI model" } });
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    setupDone = true; return;
+      (
+        window as unknown as {
+          __TAURI_INTERNALS__: {
+            runCallback: (id: number, arg: unknown) => void;
+          };
+        }
+      ).__TAURI_INTERNALS__.runCallback(handler, {
+        event: "setup://progress",
+        id: 1,
+        payload: {
+          stage: "PullModel",
+          completed: 50,
+          total: 100,
+          percent: 50,
+          message: "Downloading your AI model",
+        },
+      });
+
+    if (new URLSearchParams(location.search).has("hold")) {
+      await new Promise<void>((resolve) => {
+        (window as unknown as { finishSetup: () => void }).finishSetup =
+          resolve;
+      });
+    }
+    setupDone = true;
+    return;
   }
   if (command === "enhance_note") {
     const text = "## Decisions\nProceed with the garden plan.";
-    await new Promise((resolve) => setTimeout(resolve, 20));
+
     for (const handler of listeners["enhance://delta"] ?? [])
       (
         window as unknown as {
@@ -36,25 +95,92 @@ mockIPC(async (command, args) => {
         id: 1,
         payload: { note_id: a.noteId, delta: text },
       });
-    await new Promise((resolve) => setTimeout(resolve, 200));
+
     notes[0].summary_markdown = text;
     return { text, citations: [] };
+  }
+  if (command === "ask_workspace") {
+    const chat = chats.find((c) => c.id === a.chatId)!;
+    const sources = notes.slice(0, 2).map((n) => ({
+      note_id: n.id,
+      title: n.title,
+      seq: 1,
+      start_ms: 90000,
+      text: "garden approved",
+    }));
+    const text = "Garden approved [S1]";
+    for (const handler of listeners["workspace://delta"] ?? [])
+      (
+        window as unknown as {
+          __TAURI_INTERNALS__: {
+            runCallback: (id: number, arg: unknown) => void;
+          };
+        }
+      ).__TAURI_INTERNALS__.runCallback(handler, {
+        event: "workspace://delta",
+        id: 1,
+        payload: { chat_id: chat.id, delta: text },
+      });
+    chat.messages = [
+      {
+        role: "assistant",
+        text,
+        retrieval: { notes_searched: 2, segments_searched: 2, sources },
+      },
+    ];
+    return structuredClone(chat);
   }
   if (command === "data") {
     const p = a.payload as Record<string, unknown>;
     switch (a.action) {
-      case "settings": return { provider: "Ollama" };
-      case "speech_models": return [];
+      case "workspace_chats":
+        return structuredClone(chats);
+      case "recipes":
+        return structuredClone(recipes);
+      case "save_workspace_chat":
+        chats = [structuredClone(p), ...chats.filter((c) => c.id !== p.id)];
+        return structuredClone(p);
+      case "delete_workspace_chat":
+        chats = chats.filter((c) => c.id !== p.id);
+        return;
+      case "get":
+        return structuredClone(notes.find((n) => n.id === p.id));
+      case "save_workspace_result": {
+        const chat = chats.find((c) => c.id === p.id)!;
+        const n = {
+          ...structuredClone(notes[0]),
+          id: `note-${notes.length + 1}`,
+          title: "Recipe result",
+          notes_doc: null,
+          notes_markdown: (chat.messages as { text: string }[])[0].text,
+        };
+        notes.push(n);
+        return structuredClone(n);
+      }
+      case "settings":
+        return { provider: "Ollama" };
+      case "speech_models":
+        return [];
       case "list":
-        return notes;
+        return structuredClone(notes);
       case "templates":
         return [{ id: "auto", name: "Auto" }];
       case "folders":
-      case "segments":
         return [];
+      case "segments":
+        return [
+          {
+            id: "s1",
+            note_id: p.id,
+            seq: 1,
+            start_ms: 90000,
+            speaker: "Me",
+            text: "garden approved",
+          },
+        ];
       case "start_note": {
         const n = {
-          id: "note-1",
+          id: `note-${notes.length + 1}`,
           title: "Untitled conversation",
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -67,15 +193,15 @@ mockIPC(async (command, args) => {
           deleted_at: null,
         };
         notes.push(n);
-        return n;
+        return structuredClone(n);
       }
       case "update":
-        notes = notes.map((n) => (n.id === p.id ? p : n));
-        return p;
+        notes = notes.map((n) => (n.id === p.id ? structuredClone(p) : n));
+        return structuredClone(p);
       case "search":
         return notes
           .filter((n) => String(n.notes_markdown).includes(String(p.query)))
-          .map((note) => ({ note, snippet: "garden plan" }));
+          .map((note) => ({ note: structuredClone(note), snippet: "garden plan" }));
       case "export":
         (window as unknown as { exported: string }).exported = String(
           notes[0].summary_markdown,
