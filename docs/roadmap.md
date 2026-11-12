@@ -29,7 +29,7 @@ Copy whole transcripts, ask cited questions about a note, and preview chat revis
 or redo notes with extra instructions. Apply saves the previous summary for Undo
 and version restore. Multi-note and folder chat remain Phase 2.
 
-## Phase 2: Working with notes
+## Phase 2: Working with notes (complete)
 
 Implemented: workspace chat with scoped FTS retrieval, linked sources, persisted
 chats, text attachments, and reusable prompt recipes with JSON sharing and saved
@@ -41,36 +41,40 @@ retention, and metadata-gated image context with separate cloud consent. macOS u
 CoreGraphics without a Swift build. Wayland capture and optional local image-to-text
 descriptions remain future work.
 
-Remaining: voice typing.
+Voice typing: a global dictation shortcut (toggle or hold), a visible indicator,
+optional timed AI cleanup with editable styles, vocabulary and replacement rules,
+and a local text history with retention. Meeting capture needs explicit confirmation
+before concurrent dictation. Native permissions and cross-app paste need the hand
+checks in testing.md.
 
 People and companies are implemented with local attendee-derived profiles,
 manual editing, duplicate merge/undo, meeting histories, suggestions, and optional
 streamed recent topics. Online enrichment remains a possible later opt-in.
 
-## Phase 3: Connected workflows
+## Distribution (next)
 
-Google, Microsoft, and ICS calendars; pre-meeting briefs; follow-up drafts; chat
-actions with confirmation; Slack, Notion, CRM, and webhook integrations; local MCP
-server. Require explicit confirmation before actions with external effects.
+TalkKeeper is distributed as downloadable installers on the GitHub Releases page
+for macOS, Windows, and Linux. It is not published to any app store. A release
+workflow will build the installers from a version tag. Builds are unsigned, so the
+README will explain the one-time macOS and Windows security prompts.
 
-## Phase 4: Sync and collaboration
+## Phase 3: Calendar and integrations (scope reduced)
 
-Self-host sync server; workspaces; spaces and folders; sharing; web app; REST API;
-signed webhooks. Define permissions and sync conflict behavior before rollout.
+Calendar support uses private calendar links (ICS), which Google Calendar, Outlook,
+and Apple Calendar can all provide, so no developer accounts or sign-in apps are
+needed: meeting titles, attendees and links, starting a note from an event, and
+optional auto-start. Optional follow-ups that need no account: pre-meeting briefs
+from past notes, follow-up drafts, a local MCP server, and a generic webhook. Chat
+actions and service integrations (Slack, Notion, CRM, and similar) would use the
+user's own tokens and stay optional. Require explicit confirmation before actions
+with external effects.
 
-## Phase 5: Mobile capture
+## Not planned for now
 
-iOS and Android capture; watch app; optional VoIP calling. Account for platform
-capture constraints and participant notification in each recording flow.
+Mobile apps (iPhone, iPad, Apple Watch, Android), app-store distribution, Google and
+Microsoft sign-in integrations, and the self-host sync server, web app, and REST API
+that mobile would need. These may return later if the project's goals change.
 
-## Phase 6: Organization controls
+## Organization controls (optional, later)
 
 SSO and SCIM; audit log; legal hold; retention policies; MDM packaging.
-
-### Voice typing implementation
-
-Global configurable dictation shortcut, toggle/hold modes, microphone-only capture,
-visible level indicator, optional timed AI cleanup, editable styles, vocabulary and
-literal replacement rules, and SQLite text history with retention are implemented.
-Meeting capture requires explicit confirmation before concurrent dictation. Native
-permissions and cross-app paste still require the hardware checks in testing.md.
