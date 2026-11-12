@@ -5,8 +5,12 @@ and Linux. The planned app captures microphone and system audio without joining
 meetings as a bot. Write rough notes alongside the transcript, then turn them into
 an AI-enhanced summary.
 
-**Status: desktop core with automatic local setup.** Capture, transcription, notes,
-summaries, workspace chat, reusable recipes, shared-screen snapshots, and local storage are available; later roadmap features remain planned.
+**Status: early, personal-use project.** The desktop app works on macOS, Windows, and
+Linux: capture, transcription, notes, AI summaries, chat across notes, reusable recipes,
+people and companies, voice typing, opt-in shared-screen snapshots, and automatic local
+AI setup. Capture, hotkeys, and permissions have been verified on Linux only; macOS and
+Windows are covered by automated builds and tests but need hands-on testing. Calendars,
+integrations, sync, and the Apple apps are planned (see the roadmap). Expect rough edges.
 
 ## First run
 

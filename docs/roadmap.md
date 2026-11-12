@@ -29,7 +29,7 @@ Copy whole transcripts, ask cited questions about a note, and preview chat revis
 or redo notes with extra instructions. Apply saves the previous summary for Undo
 and version restore. Multi-note and folder chat remain Phase 2.
 
-## Phase 2: Working with notes
+## Phase 2: Working with notes (complete)
 
 Implemented: workspace chat with scoped FTS retrieval, linked sources, persisted
 chats, text attachments, and reusable prompt recipes with JSON sharing and saved
@@ -41,7 +41,11 @@ retention, and metadata-gated image context with separate cloud consent. macOS u
 CoreGraphics without a Swift build. Wayland capture and optional local image-to-text
 descriptions remain future work.
 
-Remaining: voice typing.
+Voice typing: a global dictation shortcut (toggle or hold), a visible indicator,
+optional timed AI cleanup with editable styles, vocabulary and replacement rules,
+and a local text history with retention. Meeting capture needs explicit confirmation
+before concurrent dictation. Native permissions and cross-app paste need the hand
+checks in testing.md.
 
 People and companies are implemented with local attendee-derived profiles,
 manual editing, duplicate merge/undo, meeting histories, suggestions, and optional
@@ -49,7 +53,10 @@ streamed recent topics. Online enrichment remains a possible later opt-in.
 
 ## Phase 3: Connected workflows
 
-Google, Microsoft, and ICS calendars; pre-meeting briefs; follow-up drafts; chat
+Calendars come first (Google, Microsoft, and ICS links, which also cover Apple
+Calendar): meeting titles, attendees and links, starting a note from an event, and
+optional auto-start. Each user creates their own Google and Microsoft developer apps;
+setup guides will walk through it. Then pre-meeting briefs; follow-up drafts; chat
 actions with confirmation; Slack, Notion, CRM, and webhook integrations; local MCP
 server. Require explicit confirmation before actions with external effects.
 
@@ -60,17 +67,14 @@ signed webhooks. Define permissions and sync conflict behavior before rollout.
 
 ## Phase 5: Mobile capture
 
-iOS and Android capture; watch app; optional VoIP calling. Account for platform
-capture constraints and participant notification in each recording flow.
+Apple devices are the priority: an iPhone and iPad app (in-person capture, typed
+notes, sync, and chat), plus an Apple Watch app that records offline and hands off to
+the iPhone. The Mac app already exists as the desktop app. This needs the Phase 4 sync
+server and an Apple Developer account. Android follows. iOS cannot capture other apps'
+audio or phone calls, so capture uses the device microphone; optional VoIP calling is
+a later, separate feature. Account for platform capture constraints and participant
+notification in each recording flow.
 
 ## Phase 6: Organization controls
 
 SSO and SCIM; audit log; legal hold; retention policies; MDM packaging.
-
-### Voice typing implementation
-
-Global configurable dictation shortcut, toggle/hold modes, microphone-only capture,
-visible level indicator, optional timed AI cleanup, editable styles, vocabulary and
-literal replacement rules, and SQLite text history with retention are implemented.
-Meeting capture requires explicit confirmation before concurrent dictation. Native
-permissions and cross-app paste still require the hardware checks in testing.md.
