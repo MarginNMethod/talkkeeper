@@ -5,8 +5,20 @@ and Linux. The planned app captures microphone and system audio without joining
 meetings as a bot. Write rough notes alongside the transcript, then turn them into
 an AI-enhanced summary.
 
-**Status: Phase 0 scaffold.** The desktop currently shows a placeholder home screen.
-Capture, storage, transcription, and AI features are planned, not implemented.
+**Status: desktop core with automatic local setup.** Capture, transcription, notes,
+summaries, and local storage are available; later roadmap features remain planned.
+
+## First run
+
+Open TalkKeeper and choose **Set up automatically**. Before downloading, the app
+shows estimated sizes, the model selected for your computer, and its license notes.
+It then installs or reuses Ollama without administrator access, downloads local AI
+and speech models, and checks that the AI answers. Progress, cancellation, and retry
+are available. When **You're ready** appears, create your first note. Downloads need
+a connection once; local processing works offline afterward. Low storage selects a
+smaller model where possible. **Use my own AI provider instead** opens Advanced
+settings, where provider and model choices remain available. Select **Automatic**
+to return to the managed local AI after setup.
 
 ## Recording consent
 
@@ -34,15 +46,19 @@ for the intended design.
 
 ## Privacy and local-first operation
 
-The intended default is local audio processing with whisper.cpp and local summary
-generation with Ollama. Cloud STT and Anthropic, OpenAI, or OpenAI-compatible LLM
-providers will be optional and use the user's own keys. Cloud processing will send
-the relevant content to the selected provider. Users must choose a model from the
-provider's model list or settings; no LLM model identifier is a default.
+The default is local audio processing with whisper.cpp and local AI generation
+with a managed Ollama engine. Recommendations live in the editable
+[`model-catalog.json`](crates/setup/model-catalog.json). Cloud STT and AI providers
+are optional and use your own keys; relevant content goes to your selected provider.
+Secrets use the OS keychain, never SQLite or plain-text configuration.
 
-Secrets will be stored through the Rust `keyring` crate in the OS keychain, never
-in SQLite or plain-text configuration. These integrations are future work; the
-scaffold does not collect audio, store keys, or contact AI providers.
+After setup consent, downloads contact ollama.com, registry.ollama.ai and its blob
+CDN hosts (including *.r2.cloudflarestorage.com), github.com release assets via
+release-assets.githubusercontent.com / objects.githubusercontent.com, and
+huggingface.co speech weights via cdn-lfs.huggingface.co, cdn-lfs-us-1.hf.co, or
+cas-bridge.xethub.hf.co. These services deliver files; local meetings are not sent
+to them. Local inference uses loopback only. No catalog refresh or large download
+occurs before consent. See [setup details](crates/setup/README.md).
 
 ## Developer quick start
 

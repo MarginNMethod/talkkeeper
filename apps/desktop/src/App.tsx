@@ -12,6 +12,7 @@ import { Editor } from "./Editor";
 import { Transcript } from "./Transcript";
 import { Settings } from "./Settings";
 import { Templates } from "./Templates";
+import { Setup } from "./Setup";
 import { Summary } from "./Summary";
 export function App() {
   const [notes, setNotes] = useState<Note[]>([]),
@@ -33,6 +34,10 @@ export function App() {
     [folders, setFolders] = useState<{ id: string; name: string }[]>([]),
     [folder, setFolder] = useState(""),
     [progress, setProgress] = useState("");
+  const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null);
+  useEffect(() => {
+    void invoke<{ completed: boolean; custom: boolean }>("setup_status").then((s) => setSetupNeeded(!s.completed && !s.custom)).catch(fail);
+  }, []);
   const current = useRef<Note | null>(null),
     saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     saveQueue = useRef(Promise.resolve());
@@ -93,6 +98,7 @@ export function App() {
       listen<{ source: string; level: number }>("capture://level", (e) =>
         setLevels((l) => ({ ...l, [e.payload.source]: e.payload.level })),
       ),
+      listen<string>("setup://error", (e) => fail(e.payload)),
       listen("capture://auto-stop-suggested", () => setAutoStop(true)),
       listen<{ downloaded: number; total: number }>("model://progress", (e) =>
         setProgress(
@@ -193,7 +199,7 @@ export function App() {
     <main>
       <aside className="sidebar">
         <h1>TalkKeeper</h1>
-        <button onClick={() => void create().catch(fail)}>New note</button>
+        <button disabled={setupNeeded !== false} onClick={() => void create().catch(fail)}>New note</button>
         <input
           aria-label="Search notes"
           placeholder="Search conversations"
@@ -299,9 +305,11 @@ export function App() {
         {settings ? (
           <Settings
             initial={settings}
-            onClose={() => setSettings(null)}
+            onClose={() => { setSettings(null); void invoke<{ completed: boolean; custom: boolean }>("setup_status").then((s) => setSetupNeeded(!s.completed && !s.custom)).catch(fail); }}
             onError={fail}
           />
+        ) : setupNeeded !== false ? (
+          setupNeeded === null ? <p role="status">Checking setup…</p> : <Setup onReady={() => { setSetupNeeded(false); void create().catch(fail); }} onAdvanced={() => void data<Preferences>("settings").then((p) => setSettings({ ...p, provider: "Ollama" })).catch(fail)} />
         ) : note ? (
           <>
             <header>

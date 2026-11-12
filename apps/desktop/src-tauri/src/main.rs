@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod session;
+mod setup;
 
 use futures_util::StreamExt;
 
@@ -58,10 +59,25 @@ fn provider(s: &AppState) -> Result<(Box<dyn talkkeeper_llm::LlmProvider>, Strin
         .map_err(err)?
         .unwrap_or(json!({}));
 
-    let base_url = prefs["base_url"]
-        .as_str()
-        .unwrap_or("http://localhost:11434")
-        .to_owned();
+    let automatic = prefs["provider"].as_str().unwrap_or("Automatic") == "Automatic";
+    let managed_port = store
+        .get_setting("setup.runtime_port")
+        .map_err(err)?
+        .and_then(|v| v.as_u64())
+        .unwrap_or(11500);
+    let managed_model = store
+        .get_setting("setup.llm_tag")
+        .map_err(err)?
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_default();
+    let base_url = if automatic {
+        format!("http://127.0.0.1:{managed_port}")
+    } else {
+        prefs["base_url"]
+            .as_str()
+            .unwrap_or("http://localhost:11434")
+            .to_owned()
+    };
 
     let secret_name = "llm".to_string();
 
@@ -86,7 +102,11 @@ fn provider(s: &AppState) -> Result<(Box<dyn talkkeeper_llm::LlmProvider>, Strin
 
     Ok((
         talkkeeper_llm::build_provider(config, &KeyringSecretStore).map_err(err)?,
-        prefs["model"].as_str().unwrap_or("").to_string(),
+        if automatic {
+            managed_model
+        } else {
+            prefs["model"].as_str().unwrap_or("").to_string()
+        },
     ))
 }
 
@@ -268,10 +288,20 @@ fn copy_text(state: &AppState, text: String) -> Result<()> {
 }
 
 fn preferences(store: &Store) -> Result<Value> {
-    let mut defaults = json!({"provider":"Ollama","base_url":"http://localhost:11434","language":"auto","stt_engine":"local","retention":30,"vocabulary":[],"notice":"I would like to record and transcribe this conversation for my notes. Does everyone consent?"});
+    let mut defaults = json!({"provider":"Automatic","base_url":"http://localhost:11434","language":"auto","stt_engine":"local","retention":30,"vocabulary":[],"notice":"I would like to record and transcribe this conversation for my notes. Does everyone consent?"});
     if let Some(saved) = store.get_setting("preferences").map_err(err)? {
         if let Some(values) = saved.as_object() {
             defaults.as_object_mut().unwrap().extend(values.clone());
+        }
+    }
+    if defaults["provider"] == "Automatic" {
+        if let Some(model) = store.get_setting("setup.llm_tag").map_err(err)? {
+            defaults["model"] = model;
+        }
+        if let Some(port) = store.get_setting("setup.runtime_port").map_err(err)? {
+            if let Some(port) = port.as_u64() {
+                defaults["base_url"] = json!(format!("http://127.0.0.1:{port}"));
+            }
         }
     }
     Ok(defaults)
@@ -281,8 +311,14 @@ fn validate_settings(payload: &Value) -> Result<()> {
     for (key, value) in payload.as_object().ok_or("Expected settings")? {
         match key.as_str() {
             "provider"
-                if ["Ollama", "Anthropic", "OpenAI", "OpenAICompatible"]
-                    .contains(&value.as_str().unwrap_or("")) => {}
+                if [
+                    "Automatic",
+                    "Ollama",
+                    "Anthropic",
+                    "OpenAI",
+                    "OpenAICompatible",
+                ]
+                .contains(&value.as_str().unwrap_or("")) => {}
             "stt_engine" if ["local", "cloud"].contains(&value.as_str().unwrap_or("")) => {}
             "retention" if value.as_u64().is_some_and(|n| n <= 36500) => {}
             "vocabulary"
@@ -474,10 +510,16 @@ fn main() {
                 clipboard: Mutex::new(None),
             });
 
+            app.manage(setup::SetupState::default());
+            setup::resume(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             data,
+            setup::setup_status,
+            setup::setup_plan,
+            setup::setup_run,
+            setup::setup_cancel,
             start_note,
             enhance_note,
             list_models,
@@ -487,8 +529,13 @@ fn main() {
             session::resume_capture,
             session::stop_capture
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run TalkKeeper desktop");
+        .build(tauri::generate_context!())
+        .expect("failed to build TalkKeeper desktop")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                setup::shutdown(app);
+            }
+        });
 }
 
 #[cfg(test)]

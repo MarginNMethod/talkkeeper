@@ -1,7 +1,7 @@
 # Architecture
 
 TalkKeeper uses Tauri 2 with a Rust core and React/TypeScript frontend. This document
-describes the intended design; Phase 0 includes component stubs and a desktop shell.
+describes the desktop core and the boundaries for future features.
 
 ## Repository layout
 
@@ -13,6 +13,7 @@ describes the intended design; Phase 0 includes component stubs and a desktop sh
 | `crates/core` | Domain models and storage |
 | `crates/audio` | Microphone and system audio capture |
 | `crates/transcribe` | STT engines and transcript production |
+| `crates/setup` | Hardware recommendations, verified engine installation, managed runtime lifecycle |
 | `crates/llm` | Language model provider adapters |
 | `crates/templates` | Note template definitions and rendering |
 | `crates/mcp` | Local MCP server |
@@ -40,7 +41,7 @@ flow that includes consent guidance and a notify-participants helper.
 
 ## Provider traits
 
-Future Rust traits will separate orchestration from providers. A capture trait
+Rust traits separate orchestration from providers. A capture trait
 will expose device enumeration and a cancellable frame stream. An STT trait will
 expose capabilities, language options, and segment events. An LLM trait will expose
 model listing, request streaming, cancellation, and structured errors. Provider
@@ -48,16 +49,30 @@ adapters will normalize errors without logging secrets or meeting content.
 
 Local whisper.cpp will be the default STT path, with optional cloud STT using the
 user's keys. Ollama will provide local inference; Anthropic, OpenAI, and
-OpenAI-compatible endpoints will be optional adapters. Model identifiers come from
-the provider's model list or explicit user settings. There is no hard-coded default
-LLM model. Provider selection and cloud data transfer must be visible to the user.
+OpenAI-compatible endpoints will be optional adapters. Automatic model identifiers come exclusively from the bundled, validated setup
+catalog. Advanced settings allow explicit provider/model selection. Provider selection and cloud data transfer must be visible to the user.
 
-The core will own storage contracts and future SQLite migrations. SQLite and
+The core owns storage contracts and SQLite migrations. SQLite and
 plain-text settings must never contain secrets. Credential references will resolve
 through the `keyring` crate into the OS keychain. Platform keychain availability
-must be checked rather than falling back to a plain-text store. The scaffold does
-not yet implement traits, persistence, credentials, capture, or provider calls.
+must be checked rather than falling back to a plain-text store. The core implements SQLite persistence and the desktop resolves credentials through
+the OS keychain for provider calls.
 
 Keep Tauri commands narrow and validate their inputs. Add only the capabilities
 needed by implemented features; no shell or filesystem plugin access is granted by
 this scaffold. Shared UI components contain no provider credentials or storage logic.
+
+## First-run provisioning
+
+The UI calls `setup_status` and `setup_plan` without starting a runtime or making
+network requests. Consent triggers `setup_run`; `setup://progress` reports ordered
+stages and byte/percent progress. `setup_cancel` cancels the current operation.
+`talkkeeper-setup` selects a RAM tier and falls back for storage pressure, reuses
+an external loopback engine or supervises an owned child, verifies archive checksums,
+downloads speech weights through the existing model manager, and verifies an answer
+through the LLM adapter. Only then does desktop persist completion in core Settings.
+An in-progress plan survives failure/restart. Automatic provider resolution reads
+the saved model and active port, rather than relying on a model constant. On later
+launches a completed setup attaches/starts in the background without downloading.
+The managed runtime owner stops its child on application exit; existing user engines
+remain running. See `crates/setup/README.md` for download hosts and integrity policy.

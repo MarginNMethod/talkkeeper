@@ -45,16 +45,16 @@ export function Settings({
         processing uses Ollama and a downloaded speech model.
       </p>
       <label>
-        AI provider
+        AI provider (Advanced)
         <select
-          value={prefs.provider ?? "Ollama"}
+          value={prefs.provider ?? "Automatic"}
           onChange={(e) => {
             field("provider", e.target.value);
             field("model", "");
             setModels([]);
           }}
         >
-          {["Ollama", "Anthropic", "OpenAI", "OpenAICompatible"].map((p) => (
+          {["Automatic", "Ollama", "Anthropic", "OpenAI", "OpenAICompatible"].map((p) => (
             <option key={p}>{p}</option>
           ))}
         </select>

@@ -1,6 +1,6 @@
 # Roadmap
 
-Phases describe intended scope, not release dates. Only Phase 0 is implemented.
+Phases describe intended scope, not release dates. The desktop core and automatic local setup are implemented.
 Recording consent, accessibility, and local data control guide every phase.
 
 ## Phase 0: Bootstrap
@@ -14,6 +14,13 @@ Microphone and system audio capture; voice activity detection; live transcript;
 notes editor; AI summary; templates; search; export; trash; multi-language support;
 custom vocabulary. Default to local whisper.cpp and Ollama, with optional cloud
 STT and user-key LLM providers. Provide a notify-participants helper.
+
+## Automatic local setup (implemented)
+
+Consent-first setup, hardware/storage recommendations from an editable model catalog,
+managed Ollama installation and supervision, verified speech downloads, progress,
+cancel/retry, and Advanced provider settings. Local AI becomes ready without a
+terminal or API key. Catalog refresh remains off and is not implemented.
 
 ## Phase 2: Working with notes
 

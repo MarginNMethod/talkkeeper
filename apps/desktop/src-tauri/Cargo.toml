@@ -9,6 +9,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+talkkeeper-setup = { path = "../../../crates/setup" }
 talkkeeper-core = { path = "../../../crates/core" }
 
 talkkeeper-llm = { path = "../../../crates/llm" }

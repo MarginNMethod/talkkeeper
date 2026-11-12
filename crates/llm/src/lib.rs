@@ -231,6 +231,10 @@ impl HttpProvider {
         let mut messages =
             serde_json::to_value(req.messages).map_err(|e| Error::Data(e.to_string()))?;
         let mut body = json!({"model": req.model, "messages": messages, "stream": stream});
+        if self.kind == Kind::Ollama {
+            // Generated notes need the answer itself, within the requested token budget.
+            body["think"] = json!(false);
+        }
         if self.kind == Kind::Anthropic {
             body["system"] = json!(req.system);
             body["max_tokens"] = json!(req
