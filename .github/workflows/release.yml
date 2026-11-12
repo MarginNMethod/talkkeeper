@@ -34,8 +34,31 @@ jobs:
             exit 1
           fi
 
-  build:
+  # One job creates the draft release so the parallel build jobs never race to create
+  # duplicates. They only add files to it.
+  create-release:
     needs: check-version
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+    steps:
+      - id: create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+            -f tag_name="$GITHUB_REF_NAME" \
+            -f name="TalkKeeper $GITHUB_REF_NAME" \
+            -f body="Unsigned builds for macOS, Windows and Linux, plus the optional talkkeeper-mcp program. See the README for how to open them the first time, and for the first-run setup that downloads the AI models." \
+            -F draft=true -F prerelease=true --jq .id)
+          echo "release_id=$id" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: [check-version, create-release]
+    if: ${{ !cancelled() && needs.check-version.result == 'success' && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped') }}
     permissions:
       contents: write
     strategy:
@@ -88,8 +111,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      # Tag push: build and attach installers to a draft release.
-      - name: Build and draft release
+      # Tag push: build and add the installers to the draft release made above.
+      - name: Build and add to draft release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: tauri-apps/tauri-action@v0
         env:
@@ -98,13 +121,7 @@ jobs:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
           args: ${{ matrix.args }}
-          tagName: ${{ github.ref_name }}
-          releaseName: TalkKeeper ${{ github.ref_name }}
-          releaseBody: |
-            Unsigned builds for macOS, Windows and Linux. See the README for how to open
-            them the first time, and for the first-run setup that downloads the AI models.
-          releaseDraft: true
-          prerelease: true
+          releaseId: ${{ needs.create-release.outputs.release_id }}
 
       # Manual run: build only, keep installers as downloadable workflow artifacts.
       - name: Test build (no release)
@@ -131,7 +148,8 @@ jobs:
 
   # Independent job: MCP failures cannot hide or prevent app installer uploads.
   mcp:
-    needs: check-version
+    needs: [check-version, create-release]
+    if: ${{ !cancelled() && needs.check-version.result == 'success' && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped') }}
     permissions:
       contents: write
     strategy:
@@ -184,7 +202,10 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
         run: |
-          # Creation can race with the installer job or another architecture.
-          gh release view "$GITHUB_REF_NAME" || gh release create "$GITHUB_REF_NAME" --draft --prerelease --title "TalkKeeper $GITHUB_REF_NAME" || gh release view "$GITHUB_REF_NAME"
-          gh release upload "$GITHUB_REF_NAME" mcp-dist/* --clobber
+          for file in mcp-dist/*; do
+            name=$(basename "$file")
+            gh api --method POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$name" \
+              -H "Content-Type: application/octet-stream" --input "$file"
+          done

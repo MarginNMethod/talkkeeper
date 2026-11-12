@@ -7,11 +7,13 @@ an AI-enhanced summary.
 
 **Status: early, personal-use project.** The desktop app works on macOS, Windows, and
 Linux: capture, transcription, notes, AI summaries, chat across notes, reusable recipes,
-people and companies, voice typing, opt-in shared-screen snapshots, and automatic local
-AI setup. Capture, hotkeys, and permissions have been verified on Linux only; macOS and
-Windows are covered by automated builds and tests but need hands-on testing. Downloadable installers
-for macOS, Windows, and Linux are available through releases. Calendar links are supported (see the roadmap). There
-are no plans for mobile apps or app-store releases. Expect rough edges.
+people and companies, voice typing, opt-in shared-screen snapshots, calendar links, a
+read-only local connection for other AI tools (off by default), and automatic local AI
+setup. Capture, hotkeys, and permissions have been verified on Linux only; macOS and
+Windows are covered by automated builds and tests but need hands-on testing. The first
+release (v0.1.0) is being prepared; until it is published, build from source (see the
+developer quick start below). There are no plans for mobile apps or app-store releases.
+Expect rough edges.
 
 ## Download
 
@@ -129,7 +131,8 @@ user's responsibility; it will not determine whether recording is lawful.
   proposed note revisions, redo with instructions, and version restore. Revisions require Apply.
 - **2 — Working with notes (done):** Multi-note and folder chat, prompt recipes, people and
   companies, shared-screen snapshots, and voice typing.
-- **Next — Downloadable installers:** Release builds for macOS, Windows, and Linux on GitHub.
+- **Releases:** Installers for macOS, Windows, and Linux on GitHub Releases. The pipeline is
+  ready and the first release, v0.1.0, is being prepared.
 - **3 — Calendar and integrations:** Calendar links (ICS, implemented), briefs, follow-up drafts, and a
   local MCP server (implemented). No sign-in apps or app stores.
 - **Not planned for now:** mobile apps, app-store releases, and a sync server.
