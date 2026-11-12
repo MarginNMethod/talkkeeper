@@ -27,7 +27,7 @@ arboard = { version = "3", default-features = false, features = ["image-data"] }
 
 tauri-plugin-global-shortcut = "2"
 enigo = { version = "0.6", default-features = false, features = ["x11rb"] }
-xcap = "=0.0.14"
+xcap = "=0.4.1"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 base64 = "0.22"
 

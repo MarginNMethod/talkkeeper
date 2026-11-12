@@ -18,12 +18,20 @@ trait ScreenBackend {
 }
 struct NativeScreen;
 fn own(window: &xcap::Window) -> bool {
-    window.app_name().to_lowercase().contains("talkkeeper")
-        || window.title().to_lowercase().contains("talkkeeper")
+    window
+        .app_name()
+        .unwrap_or_default()
+        .to_lowercase()
+        .contains("talkkeeper")
+        || window
+            .title()
+            .unwrap_or_default()
+            .to_lowercase()
+            .contains("talkkeeper")
         || {
             #[cfg(windows)]
             {
-                window.process_id() == std::process::id()
+                window.process_id().ok() == Some(std::process::id())
             }
             #[cfg(not(windows))]
             {
@@ -88,8 +96,14 @@ fn order_windows(windows: &mut [xcap::Window]) -> bool {
         (!order.is_empty()).then_some(order)
     })();
     if let Some(order) = result {
-        windows
-            .sort_by_key(|window| std::cmp::Reverse(order.get(&window.id()).copied().unwrap_or(0)));
+        windows.sort_by_key(|window| {
+            std::cmp::Reverse(
+                order
+                    .get(&window.id().unwrap_or_default())
+                    .copied()
+                    .unwrap_or(0),
+            )
+        });
         true
     } else {
         false
@@ -108,13 +122,16 @@ fn mask_own_windows(
 ) {
     let sx = frame.width() as f64 / f64::from(size.0.max(1));
     let sy = frame.height() as f64 / f64::from(size.1.max(1));
-    for window in windows.iter().filter(|w| own(w) && !w.is_minimized()) {
-        let x = (f64::from(window.x()) - f64::from(origin.0)) * sx;
-        let y = (f64::from(window.y()) - f64::from(origin.1)) * sy;
-        let right = (x + f64::from(window.width()) * sx)
+    for window in windows
+        .iter()
+        .filter(|w| own(w) && !w.is_minimized().unwrap_or_default())
+    {
+        let x = (f64::from(window.x().unwrap_or_default()) - f64::from(origin.0)) * sx;
+        let y = (f64::from(window.y().unwrap_or_default()) - f64::from(origin.1)) * sy;
+        let right = (x + f64::from(window.width().unwrap_or_default()) * sx)
             .ceil()
             .clamp(0.0, f64::from(frame.width())) as u32;
-        let bottom = (y + f64::from(window.height()) * sy)
+        let bottom = (y + f64::from(window.height().unwrap_or_default()) * sy)
             .ceil()
             .clamp(0.0, f64::from(frame.height())) as u32;
         for yy in (y.floor().max(0.0) as u32)..bottom {
@@ -132,12 +149,24 @@ impl ScreenBackend for NativeScreen {
         let ordered = order_windows(&mut windows);
         let mut sources: Vec<_> = windows
             .iter()
-            .filter(|w| !w.is_minimized() && w.width() > 0 && w.height() > 0)
+            .filter(|w| {
+                !w.is_minimized().unwrap_or_default()
+                    && w.width().unwrap_or_default() > 0
+                    && w.height().unwrap_or_default() > 0
+            })
             .map(|w| ScreenSource {
-                id: format!("window:{}", w.id()),
-                name: format!("{} — {}", w.app_name(), w.title()),
+                id: format!("window:{}", w.id().unwrap_or_default()),
+                name: format!(
+                    "{} — {}",
+                    w.app_name().unwrap_or_default(),
+                    w.title().unwrap_or_default()
+                ),
                 own: own(w),
-                primary: w.current_monitor().is_primary() && ordered,
+                primary: w
+                    .current_monitor()
+                    .and_then(|m| m.is_primary())
+                    .unwrap_or(false)
+                    && ordered,
             })
             .collect();
         sources.extend(
@@ -145,10 +174,10 @@ impl ScreenBackend for NativeScreen {
                 .map_err(|_| GUIDANCE)?
                 .iter()
                 .map(|m| ScreenSource {
-                    id: format!("display:{}", m.id()),
-                    name: format!("Display: {}", m.name()),
+                    id: format!("display:{}", m.id().unwrap_or_default()),
+                    name: format!("Display: {}", m.name().unwrap_or_default()),
                     own: false,
-                    primary: m.is_primary(),
+                    primary: m.is_primary().unwrap_or_default(),
                 }),
         );
         Ok(sources)
@@ -160,13 +189,23 @@ impl ScreenBackend for NativeScreen {
         if let Some(id) = source.strip_prefix("window:") {
             let window = windows
                 .iter()
-                .find(|w| w.id().to_string() == id && !own(w) && !w.is_minimized())
+                .find(|w| {
+                    w.id().unwrap_or_default().to_string() == id
+                        && !own(w)
+                        && !w.is_minimized().unwrap_or_default()
+                })
                 .ok_or("Selected window is unavailable; choose a source again")?;
             let mut frame = window.capture_image().map_err(|_| GUIDANCE)?;
             mask_own_windows(
                 &mut frame,
-                (window.x(), window.y()),
-                (window.width(), window.height()),
+                (
+                    window.x().unwrap_or_default(),
+                    window.y().unwrap_or_default(),
+                ),
+                (
+                    window.width().unwrap_or_default(),
+                    window.height().unwrap_or_default(),
+                ),
                 &windows,
             );
             return Ok(frame);
@@ -174,14 +213,20 @@ impl ScreenBackend for NativeScreen {
         let monitor = xcap::Monitor::all()
             .map_err(|_| GUIDANCE)?
             .into_iter()
-            .find(|m| source == format!("display:{}", m.id()))
+            .find(|m| source == format!("display:{}", m.id().unwrap_or_default()))
             .ok_or("Selected display is unavailable")?;
         let mut frame = monitor.capture_image().map_err(|_| GUIDANCE)?;
         // Exclude our visible rectangles before comparison, encoding, or storage.
         mask_own_windows(
             &mut frame,
-            (monitor.x(), monitor.y()),
-            (monitor.width(), monitor.height()),
+            (
+                monitor.x().unwrap_or_default(),
+                monitor.y().unwrap_or_default(),
+            ),
+            (
+                monitor.width().unwrap_or_default(),
+                monitor.height().unwrap_or_default(),
+            ),
             &windows,
         );
         Ok(frame)
