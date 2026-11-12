@@ -9,8 +9,9 @@ an AI-enhanced summary.
 Linux: capture, transcription, notes, AI summaries, chat across notes, reusable recipes,
 people and companies, voice typing, opt-in shared-screen snapshots, and automatic local
 AI setup. Capture, hotkeys, and permissions have been verified on Linux only; macOS and
-Windows are covered by automated builds and tests but need hands-on testing. Calendars,
-integrations, sync, and the Apple apps are planned (see the roadmap). Expect rough edges.
+Windows are covered by automated builds and tests but need hands-on testing. Downloadable installers
+for macOS, Windows, and Linux and calendar links are planned next (see the roadmap). There
+are no plans for mobile apps or app-store releases. Expect rough edges.
 
 ## First run
 
@@ -86,14 +87,12 @@ user's responsibility; it will not determine whether recording is lawful.
   search, export, trash, multiple languages, and custom vocabulary.
 - **1.5 — Note conversations:** Copy full transcripts with formatting options, cited per-note chat,
   proposed note revisions, redo with instructions, and version restore. Revisions require Apply.
-- **2 — Working with notes:** Multi-note and folder chat, prompt recipes, people and companies,
-  shared-screen snapshots, and voice typing.
-- **3 — Connected workflows:** Calendars, briefs, follow-up drafts, confirmed chat
-  actions, integrations, and a local MCP server.
-- **4 — Collaboration:** Self-hosted sync, workspaces, folders, sharing, web app,
-  REST API, and signed webhooks.
-- **5 — Mobile:** iOS/Android capture, watch app, and optional VoIP calling.
-- **6 — Organization controls:** SSO/SCIM, audit log, legal hold, retention, and MDM.
+- **2 — Working with notes (done):** Multi-note and folder chat, prompt recipes, people and
+  companies, shared-screen snapshots, and voice typing.
+- **Next — Downloadable installers:** Release builds for macOS, Windows, and Linux on GitHub.
+- **3 — Calendar and integrations:** Calendar links (ICS), briefs, follow-up drafts, and a
+  local MCP server. No sign-in apps or app stores.
+- **Not planned for now:** mobile apps, app-store releases, and a sync server.
 
 See [the roadmap](docs/roadmap.md) for scope and [architecture](docs/architecture.md)
 for the intended design.

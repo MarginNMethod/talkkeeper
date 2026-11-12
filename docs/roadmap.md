@@ -51,30 +51,30 @@ People and companies are implemented with local attendee-derived profiles,
 manual editing, duplicate merge/undo, meeting histories, suggestions, and optional
 streamed recent topics. Online enrichment remains a possible later opt-in.
 
-## Phase 3: Connected workflows
+## Distribution (next)
 
-Calendars come first (Google, Microsoft, and ICS links, which also cover Apple
-Calendar): meeting titles, attendees and links, starting a note from an event, and
-optional auto-start. Each user creates their own Google and Microsoft developer apps;
-setup guides will walk through it. Then pre-meeting briefs; follow-up drafts; chat
-actions with confirmation; Slack, Notion, CRM, and webhook integrations; local MCP
-server. Require explicit confirmation before actions with external effects.
+TalkKeeper is distributed as downloadable installers on the GitHub Releases page
+for macOS, Windows, and Linux. It is not published to any app store. A release
+workflow will build the installers from a version tag. Builds are unsigned, so the
+README will explain the one-time macOS and Windows security prompts.
 
-## Phase 4: Sync and collaboration
+## Phase 3: Calendar and integrations (scope reduced)
 
-Self-host sync server; workspaces; spaces and folders; sharing; web app; REST API;
-signed webhooks. Define permissions and sync conflict behavior before rollout.
+Calendar support uses private calendar links (ICS), which Google Calendar, Outlook,
+and Apple Calendar can all provide, so no developer accounts or sign-in apps are
+needed: meeting titles, attendees and links, starting a note from an event, and
+optional auto-start. Optional follow-ups that need no account: pre-meeting briefs
+from past notes, follow-up drafts, a local MCP server, and a generic webhook. Chat
+actions and service integrations (Slack, Notion, CRM, and similar) would use the
+user's own tokens and stay optional. Require explicit confirmation before actions
+with external effects.
 
-## Phase 5: Mobile capture
+## Not planned for now
 
-Apple devices are the priority: an iPhone and iPad app (in-person capture, typed
-notes, sync, and chat), plus an Apple Watch app that records offline and hands off to
-the iPhone. The Mac app already exists as the desktop app. This needs the Phase 4 sync
-server and an Apple Developer account. Android follows. iOS cannot capture other apps'
-audio or phone calls, so capture uses the device microphone; optional VoIP calling is
-a later, separate feature. Account for platform capture constraints and participant
-notification in each recording flow.
+Mobile apps (iPhone, iPad, Apple Watch, Android), app-store distribution, Google and
+Microsoft sign-in integrations, and the self-host sync server, web app, and REST API
+that mobile would need. These may return later if the project's goals change.
 
-## Phase 6: Organization controls
+## Organization controls (optional, later)
 
 SSO and SCIM; audit log; legal hold; retention policies; MDM packaging.
