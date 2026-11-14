@@ -20,6 +20,22 @@ Expect rough edges.
 Installers for macOS, Windows, and Linux are published on the
 [Releases page](../../releases). TalkKeeper is not in any app store.
 
+**Which file do I download?**
+
+| Your computer | Download this file |
+| --- | --- |
+| Mac with an Apple chip (M1, M2, M3, M4 or newer) | the `.dmg` ending in `aarch64` |
+| Older Mac with an Intel processor | the `.dmg` ending in `x64` |
+| Windows | the `.exe` ending in `x64-setup` (or the `.msi` if your IT team asks for one) |
+| Linux (most distributions) | the `.AppImage` |
+| Debian, Ubuntu, Mint | the `.deb` |
+| Fedora, RHEL, openSUSE | the `.rpm` |
+
+Not sure which Mac you have? Open the Apple menu, then **About This Mac**. If it says
+**Chip: Apple M…**, take the `aarch64` file. If it says **Processor: Intel…**, take `x64`.
+The files starting with `talkkeeper-mcp` and the `.app.tar.gz` files are not installers; you can
+ignore them unless you want the optional connection for other AI tools.
+
 The builds are **unsigned** (code-signing certificates cost money and need developer accounts),
 so your system will warn you the first time:
 
