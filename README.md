@@ -11,14 +11,14 @@ people and companies, voice typing, opt-in shared-screen snapshots, calendar lin
 read-only local connection for other AI tools (off by default), and automatic local AI
 setup. Capture, hotkeys, and permissions have been verified on Linux only; macOS and
 Windows are covered by automated builds and tests but need hands-on testing. The first
-release (v0.1.0) is being prepared; until it is published, build from source (see the
-developer quick start below). There are no plans for mobile apps or app-store releases.
+release (v0.1.0) is published as a pre-release on the Releases page; you can also build from
+source (see the developer quick start below). There are no plans for mobile apps or app-store releases.
 Expect rough edges.
 
 ## Download
 
 Installers for macOS, Windows, and Linux are published on the
-[Releases page](../../releases) once a version is released. TalkKeeper is not in any app store.
+[Releases page](../../releases). TalkKeeper is not in any app store.
 
 The builds are **unsigned** (code-signing certificates cost money and need developer accounts),
 so your system will warn you the first time:
@@ -132,7 +132,7 @@ user's responsibility; it will not determine whether recording is lawful.
 - **2 — Working with notes (done):** Multi-note and folder chat, prompt recipes, people and
   companies, shared-screen snapshots, and voice typing.
 - **Releases:** Installers for macOS, Windows, and Linux on GitHub Releases. The pipeline is
-  ready and the first release, v0.1.0, is being prepared.
+  ready and the first release, v0.1.0, is published as a pre-release.
 - **3 — Calendar and integrations:** Calendar links (ICS, implemented), briefs, follow-up drafts, and a
   local MCP server (implemented). No sign-in apps or app stores.
 - **Not planned for now:** mobile apps, app-store releases, and a sync server.
