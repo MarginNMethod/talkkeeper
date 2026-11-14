@@ -10,8 +10,8 @@ Linux: capture, transcription, notes, AI summaries, chat across notes, reusable 
 people and companies, voice typing, opt-in shared-screen snapshots, calendar links, a
 read-only local connection for other AI tools (off by default), and automatic local AI
 setup. Capture, hotkeys, and permissions have been verified on Linux only; macOS and
-Windows are covered by automated builds and tests but need hands-on testing. The first
-release (v0.1.0) is published as a pre-release on the Releases page; you can also build from
+Windows are covered by automated builds and tests but need hands-on testing. The latest
+release (v0.1.1) is published as a pre-release on the Releases page; you can also build from
 source (see the developer quick start below). There are no plans for mobile apps or app-store releases.
 Expect rough edges.
 
@@ -132,7 +132,7 @@ user's responsibility; it will not determine whether recording is lawful.
 - **2 — Working with notes (done):** Multi-note and folder chat, prompt recipes, people and
   companies, shared-screen snapshots, and voice typing.
 - **Releases:** Installers for macOS, Windows, and Linux on GitHub Releases. The pipeline is
-  ready and the first release, v0.1.0, is published as a pre-release.
+  ready and the latest release, v0.1.1, is published as a pre-release.
 - **3 — Calendar and integrations:** Calendar links (ICS, implemented), briefs, follow-up drafts, and a
   local MCP server (implemented). No sign-in apps or app stores.
 - **Not planned for now:** mobile apps, app-store releases, and a sync server.
