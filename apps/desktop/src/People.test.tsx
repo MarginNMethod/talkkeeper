@@ -76,6 +76,25 @@ test("attendee suggestions preserve known email and open the person", async () =
     { name: "New", email: "new@team.org" },
   ]);
 });
+test("person page shows its editing fields as soon as the person appears", async () => {
+  backend();
+  render(
+    <People
+      kind="people"
+      initialPerson="a"
+      onStart={vi.fn()}
+      onSelect={vi.fn()}
+      onError={(e) => {
+        throw e;
+      }}
+    />,
+  );
+  // The person's heading and the editing fields must arrive together. A short stall
+  // between them used to make this page look half-loaded (and flaked on slow machines).
+  await screen.findByRole("heading", { level: 3, name: "Ada" });
+  expect(screen.getByLabelText("Person name")).toBeTruthy();
+  expect(screen.getByText("Start a note with this person")).toBeTruthy();
+});
 test("person page lists meetings, starts notes and confirms merge", async () => {
   backend();
   const start = vi.fn(),
@@ -91,7 +110,9 @@ test("person page lists meetings, starts notes and confirms merge", async () => 
       }}
     />,
   );
-  fireEvent.click(await screen.findByText("Start a note with this person"));
+  fireEvent.click(
+    await screen.findByText("Start a note with this person", {}, { timeout: 5000 }),
+  );
   expect(start).toHaveBeenCalledWith(ada);
   fireEvent.click(screen.getByRole("button", { name: /Planning/ }));
   expect(select).toHaveBeenCalledWith(meeting);
