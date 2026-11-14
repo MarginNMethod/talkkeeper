@@ -5201,7 +5201,7 @@ dependencies = [
 
 [[package]]
 name = "talkkeeper-audio"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cpal",
  "hound",
@@ -5214,7 +5214,7 @@ dependencies = [
 
 [[package]]
 name = "talkkeeper-calendar"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -5231,7 +5231,7 @@ dependencies = [
 
 [[package]]
 name = "talkkeeper-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "csv",
@@ -5245,7 +5245,7 @@ dependencies = [
 
 [[package]]
 name = "talkkeeper-desktop"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "arboard",
  "async-trait",
@@ -5277,11 +5277,11 @@ dependencies = [
 
 [[package]]
 name = "talkkeeper-integrations"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "talkkeeper-llm"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -5297,7 +5297,7 @@ dependencies = [
 
 [[package]]
 name = "talkkeeper-mcp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "dirs 6.0.0",
@@ -5314,7 +5314,7 @@ dependencies = [
 
 [[package]]
 name = "talkkeeper-setup"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "flate2",
  "futures-util",
@@ -5337,7 +5337,7 @@ dependencies = [
 
 [[package]]
 name = "talkkeeper-templates"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "insta",
  "serde",
@@ -5347,7 +5347,7 @@ dependencies = [
 
 [[package]]
 name = "talkkeeper-transcribe"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "futures-util",
