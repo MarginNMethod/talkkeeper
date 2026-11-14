@@ -65,7 +65,15 @@ export function People({
     [undo, setUndo] = useState(false),
     [topics, setTopics] = useState(""),
     [busy, setBusy] = useState(false),
-    [draft, setDraft] = useState<Person | null>(null);
+    // Unsaved edits to the selected person. They are tied to the list they were made
+    // against, so a refresh or a different selection starts from the saved person.
+    [edits, setEdits] = useState<{ base: Person[]; value: Person } | null>(null);
+  const savedPerson = people.find((p) => p.id === selected) ?? null;
+  const draft =
+    edits && edits.base === people && edits.value.id === selected
+      ? edits.value
+      : savedPerson;
+  const setDraft = (value: Person) => setEdits({ base: people, value });
   async function refresh() {
     const [ps, cs] = await Promise.all([
       data<Person[]>("people"),
@@ -92,7 +100,6 @@ export function People({
     void refresh().catch(onError);
   }, [kind, initialPerson]);
   useEffect(() => {
-    setDraft(people.find((p) => p.id === selected) ?? null);
     setTopics("");
   }, [selected, people]);
   const entry = entries.find((p) => p.id === selected);
