@@ -7,3 +7,6 @@ coverage/
 .env.*
 .ip-guard-terms
 apps/desktop/src-tauri/gen/
+
+# Opt-in redesign visual captures
+apps/desktop/e2e/screenshots/

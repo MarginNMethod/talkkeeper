@@ -1,0 +1,38 @@
+.tk-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+.tk-button--sm { min-height: 32px; padding: var(--s1) var(--s2); }
+.tk-button--md { min-height: 40px; padding: var(--s2) var(--s3); }
+.tk-button--lg { min-height: 48px; padding: var(--s3) var(--s4); }
+button.tk-button--primary { background: var(--accent); color: var(--on-accent); }
+button.tk-button--primary:hover { background: var(--accent-hover); }
+button.tk-button--quiet { background: transparent; color: var(--text); }
+button.tk-button--quiet:hover { background: var(--surface-sunken); }
+button.tk-button--danger { background: var(--danger-tint); color: var(--danger); }
+button.tk-button--danger:hover { border-color: var(--danger); background: var(--danger-tint); }
+.tk-button:focus-visible, .tk-popover-panel:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.tk-icon-button { aspect-ratio: 1; padding: var(--s2); }
+.tk-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--s5); }
+.tk-row { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); border-radius: var(--radius-sm); color: var(--text); }
+.tk-row:hover, .tk-row:focus-within { background: var(--surface-sunken); }
+.tk-row-icon { flex-shrink: 0; display: inline-flex; }
+.tk-row-content { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tk-row-subtitle { color: var(--muted); font-size: var(--text-sm); }
+.tk-row-actions { opacity: 0; }
+.tk-row:hover .tk-row-actions, .tk-row:focus-within .tk-row-actions { opacity: 1; }
+.tk-pill { display: inline-flex; align-items: center; padding: var(--s1) var(--s2); border-radius: var(--radius-pill); background: var(--surface-sunken); color: var(--muted); font-size: var(--text-xs); }
+.tk-popover { position: relative; display: inline-block; }
+.tk-popover-panel { position: absolute; z-index: 20; inset-block-start: calc(100% + var(--s2)); inset-inline-start: 0; width: max-content; max-width: min(320px, 90vw); padding: var(--s4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel); color: var(--text); box-shadow: var(--shadow-floating); }
+.tk-empty-state { text-align: center; padding: var(--s7) var(--s5); color: var(--muted); }
+.tk-empty-state h3 { color: var(--text); font-size: var(--text-lg); }
+@media (hover: none) { .tk-row-actions { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .tk-button { transition: none; } }

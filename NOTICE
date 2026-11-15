@@ -2,3 +2,13 @@ TalkKeeper
 Copyright 2026 TalkKeeper contributors
 
 Licensed under the Apache License, Version 2.0.
+
+Bundled fonts (SIL Open Font License 1.1):
+Inter — Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter).
+Newsreader — Copyright 2020 The Newsreader Project Authors (https://github.com/productiontype/Newsreader).
+Latin variable WOFF2 distributions from https://fontsource.org/fonts/inter and
+https://fontsource.org/fonts/newsreader (downloaded 2026-11-15).
+Full license and copyright notices: apps/desktop/src/fonts/Inter-OFL.txt and
+apps/desktop/src/fonts/Newsreader-OFL.txt. Fonts are redistributed unmodified.
+The Rust cargo-deny policy and CI audit Rust crates; these static font assets
+are covered by the accompanying OFL notices and may be bundled with this app.
