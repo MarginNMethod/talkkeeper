@@ -150,9 +150,10 @@ pub fn recommend(hardware: &Hardware, catalog: &Catalog) -> Result<Plan> {
         .iter()
         .rposition(|t| ram >= t.min_ram_gb)
         .ok_or(Error::Catalog)?;
+    let speech = &catalog.0[0].whisper;
     let size = |t: &Tier| {
         (t.llm.approx_download_gb * GB as f64) as u64
-            + (t.whisper.approx_download_mb * 1e6) as u64
+            + (speech.approx_download_mb * 1e6) as u64
             + RUNTIME_BYTES
     };
     let chosen = (0..=preferred)
@@ -162,7 +163,7 @@ pub fn recommend(hardware: &Hardware, catalog: &Catalog) -> Result<Plan> {
     let t = &catalog.0[index];
     Ok(Plan {
         llm: t.llm.clone(),
-        whisper: t.whisper.clone(),
+        whisper: speech.clone(),
         total_download_bytes: size(t),
         hardware: hardware.clone(),
         can_install: chosen.is_some() && ram >= 4,

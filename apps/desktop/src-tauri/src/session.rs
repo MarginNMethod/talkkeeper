@@ -98,6 +98,7 @@ async fn prepare_capture(
         note.ended_at = None;
         db.update_note(&note).map_err(err)?;
     }
+    setup::queue_recording(&state.store, note_id)?;
     state
         .snapshots
         .lock()
@@ -265,10 +266,14 @@ async fn run_capture(
     if let Ok(mut active) = state.capture.lock() {
         *active = None;
     }
+    let _ = setup::queue_recording(&store, note_id);
     let _ = app.emit(
         "capture://state",
         json!({"note_id": note_id, "state": "stopped", "error": result.err()}),
     );
+    tauri::async_runtime::spawn(async move {
+        let _ = setup::drain_queue(&app).await;
+    });
 }
 
 fn control(state: tauri::State<'_, AppState>, command: &str) -> Result<()> {
