@@ -56,7 +56,7 @@ test("transcript selection deletes only selected segments", () => {
 });
 test("settings retrieves models and allows explicit model selection", async () => {
   render(<Settings initial={{}} onClose={() => {}} onError={() => {}} />);
-  fireEvent.click(screen.getByText("Load models"));
+  fireEvent.click(screen.getByText("Refresh list"));
   await waitFor(() => expect(screen.getByText("Chosen model")).toBeTruthy());
   fireEvent.change(screen.getByLabelText("AI model"), {
     target: { value: "chosen-model" },
@@ -64,7 +64,7 @@ test("settings retrieves models and allows explicit model selection", async () =
   expect((screen.getByLabelText("AI model") as HTMLSelectElement).value).toBe(
     "chosen-model",
   );
-  fireEvent.click(screen.getByText("Save settings"));
+  fireEvent.click(screen.getByText("Save changes"));
   await waitFor(() =>
     expect(data).toHaveBeenCalledWith("save_settings", {
       model: "chosen-model",
@@ -82,7 +82,7 @@ test("editor exposes formatting actions and editable notes", () => {
     "Checklist",
   ])
     expect(screen.getByRole("button", { name: label })).toBeTruthy();
-  expect(screen.getByRole("textbox", { name: "Rough notes" })).toBeTruthy();
+  expect(screen.getByRole("textbox", { name: "Your notes" })).toBeTruthy();
   fireEvent.click(screen.getByText("Heading"));
   expect(
     screen.getByRole("heading", { name: "A thought", level: 2 }),

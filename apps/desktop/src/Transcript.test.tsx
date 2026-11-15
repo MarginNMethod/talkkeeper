@@ -115,7 +115,7 @@ test("retention selects keep forever by default and preserve custom saved durati
     "17 days",
   ]);
   fireEvent.change(transcripts, { target: { value: "0" } });
-  fireEvent.click(screen.getByText("Save settings"));
+  fireEvent.click(screen.getByText("Save changes"));
   await vi.waitFor(() =>
     expect(data).toHaveBeenCalledWith("save_settings", { retention: 0 }),
   );

@@ -16,7 +16,7 @@ export function Templates({
         ? { ...t }
         : {
             id: crypto.randomUUID(),
-            name: "Custom template",
+            name: "My style",
             description: "",
             sections: [
               {
@@ -31,8 +31,8 @@ export function Templates({
   }
   return (
     <details>
-      <summary>Manage templates</summary>
-      <button onClick={() => edit()}>Create template</button>
+      <summary>Edit styles…</summary>
+      <button onClick={() => edit()}>New style</button>
       {templates
         .filter((t) => !t.built_in)
         .map((t) => (
@@ -50,7 +50,7 @@ export function Templates({
       {draft && (
         <div>
           <label>
-            Template name
+            Style name
             <input
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
@@ -66,7 +66,7 @@ export function Templates({
             />
           </label>
           <label>
-            Section headings (one per line)
+            Headings to use (one per line)
             <textarea
               value={draft.sections.map((s) => s.heading).join("\n")}
               onChange={(e) =>
@@ -82,7 +82,7 @@ export function Templates({
             />
           </label>
           <label>
-            Instructions
+            Anything else the summary should do
             <textarea
               value={draft.extra_instructions}
               onChange={(e) =>

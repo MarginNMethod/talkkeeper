@@ -54,7 +54,7 @@ mockIPC(async (command, args) => {
     if (a.action === "set") { mcpPreferences[p.key] = p.value; return; }
     if (a.action === "recent") return structuredClone(mcpAccess);
     if (a.action === "clear") { mcpAccess = []; return; }
-    if (a.action === "check") return mcpPreferences.enabled ? "Ready. Notes can be read by connected tools." : "Turn on 'Connect other AI tools' in TalkKeeper settings";
+    if (a.action === "check") return mcpPreferences.enabled ? "Ready. Notes can be read by connected tools." : "Turn on 'Let other AI apps read your notes' in TalkKeeper settings";
   }
   if (command === "dictation_data") {
     const p = a.payload as Record<string, unknown>;
@@ -357,7 +357,7 @@ mockIPC(async (command, args) => {
       case "start_note": {
         const n = {
           id: `note-${notes.length + 1}`,
-          title: "Untitled conversation",
+          title: "Untitled meeting",
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           notes_markdown: "",

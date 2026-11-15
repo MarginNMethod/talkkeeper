@@ -93,7 +93,7 @@ export function RecipeEditor({
       }}
     >
       <label>
-        Recipe name
+        Saved question name
         <input
           required
           maxLength={200}
@@ -119,10 +119,10 @@ export function RecipeEditor({
         />
       </label>
       <p>
-        Optional variables: {"{{notes}}"}, {"{{topic}}"}. The current scope
-        becomes the recipe default.
+        Optional variables: {"{{notes}}"}, {"{{topic}}"}. The notes you choose
+        become the default for this saved question.
       </p>
-      <button>Save recipe</button>
+      <button>Save question</button>
       <button type="button" onClick={onCancel}>
         Cancel
       </button>
@@ -131,11 +131,13 @@ export function RecipeEditor({
 }
 export function WorkspaceChat({
   selected,
+  onSelectedChange,
   folders,
   onOpen,
   onSaved,
 }: {
   selected: string[];
+  onSelectedChange?: (ids: string[]) => void;
   folders: { id: string; name: string }[];
   onOpen: (id: string, seq: number) => void;
   onSaved: (n: Note) => void;
@@ -190,7 +192,7 @@ export function WorkspaceChat({
       const recipe = recipes.find((r) => r.id === recipeId);
       const next = {
         ...(chat ?? { id: crypto.randomUUID(), messages: [], attachments: [] }),
-        name: recipe?.name ?? (question.slice(0, 80) || "Workspace chat"),
+        name: recipe?.name ?? (question.slice(0, 80) || "Question"),
         scope: effective,
       };
       await save(next);
@@ -233,17 +235,17 @@ export function WorkspaceChat({
       <h2>Ask your notes</h2>
       {cloud && (
         <p role="status">
-          Cloud provider active: retrieved notes and attached context are sent
-          to your selected AI provider.
+          Online service active: retrieved notes and attached context are sent
+          to your selected online AI service.
         </p>
       )}
       {error && <p role="alert">{error}</p>}
       <fieldset disabled={busy}>
-        <legend>Scope</legend>
+        <legend>Which notes?</legend>
         <label>
-          Choose scope
+          Which notes?
           <select
-            aria-label="Choose scope"
+            aria-label="Which notes?"
             value={mode}
             onChange={(e) => {
               setMode(e.target.value);
@@ -254,14 +256,36 @@ export function WorkspaceChat({
               <option value="saved selection">Saved selected notes</option>
             )}
             <option value="all">All notes</option>
-            <option value="selected">Selected notes</option>
+            <option value="selected">Notes I choose</option>
             <option value="folder">A folder</option>
             <option value="date">Date range</option>
           </select>
         </label>
+        {mode === "selected" && onSelectedChange && (
+          <fieldset>
+            <legend>Choose notes to ask about</legend>
+            {notes.map((n) => (
+              <label key={n.id}>
+                <input
+                  type="checkbox"
+                  aria-label={`Select note ${n.title}`}
+                  checked={selected.includes(n.id)}
+                  onChange={(e) =>
+                    onSelectedChange(
+                      e.target.checked
+                        ? [...selected, n.id]
+                        : selected.filter((id) => id !== n.id),
+                    )
+                  }
+                />
+                {n.title}
+              </label>
+            ))}
+          </fieldset>
+        )}
         {mode === "folder" && (
           <label>
-            Scope folder
+            Folder to ask about
             <select
               value={scope.folder_id ?? ""}
               onChange={(e) =>
@@ -300,7 +324,7 @@ export function WorkspaceChat({
             ))}
           </>
         )}
-        <div aria-label="Scope chips">
+        <div aria-label="Notes included">
           <span className="pill">
             {mode} · {count} notes included
           </span>
@@ -367,11 +391,11 @@ export function WorkspaceChat({
       >
         Clear chat
       </button>
-      <h3>Recipes</h3>
+      <h3>Saved questions</h3>
       <label>
-        Recipe
+        Saved question
         <select
-          aria-label="Recipe"
+          aria-label="Saved question"
           value={recipeId}
           disabled={busy}
           onChange={(e) => {
@@ -410,7 +434,7 @@ export function WorkspaceChat({
           })
         }
       >
-        New recipe
+        New question
       </button>
       {recipeId &&
         recipes
@@ -421,7 +445,7 @@ export function WorkspaceChat({
               <button
                 onClick={() => setEditing({ ...r, default_scope: effective })}
               >
-                Edit recipe
+                Edit question
               </button>
               <button
                 onClick={() =>
@@ -442,13 +466,13 @@ export function WorkspaceChat({
                     .catch(fail)
                 }
               >
-                Delete recipe
+                Delete question
               </button>
-              <button onClick={() => exportRecipe(r)}>Export recipe</button>
+              <button onClick={() => exportRecipe(r)}>Export question</button>
             </div>
           ))}
       <label>
-        Import recipe
+        Import question
         <input
           type="file"
           accept=".json"
@@ -456,7 +480,9 @@ export function WorkspaceChat({
             const file = e.target.files?.[0];
             if (file) {
               if (file.size > 32768) {
-                fail("Recipe exceeds 32 KiB");
+                fail(
+                  "This saved question file is too large. Choose one smaller than 32 KB.",
+                );
                 return;
               }
               void file
@@ -511,7 +537,7 @@ export function WorkspaceChat({
                   save({
                     ...(chat ?? {
                       id: crypto.randomUUID(),
-                      name: "Workspace chat",
+                      name: "Question",
                       messages: [],
                       attachments: [],
                       scope: effective,
@@ -558,7 +584,7 @@ export function WorkspaceChat({
             <>
               <p>
                 Searched {m.retrieval.notes_searched} notes /{" "}
-                {m.retrieval.segments_searched} segments and sections; retrieved{" "}
+                {m.retrieval.segments_searched} lines and sections; retrieved{" "}
                 {m.retrieval.sources.length}.
               </p>
               <button
@@ -595,7 +621,7 @@ export function WorkspaceChat({
         }
         onClick={() => void run()}
       >
-        {recipeId ? "Run recipe" : "Ask"}
+        {recipeId ? "Run question" : "Ask"}
       </button>
       <button
         disabled={busy || !chat?.messages.some((m) => m.role === "assistant")}

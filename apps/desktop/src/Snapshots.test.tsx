@@ -41,8 +41,8 @@ afterEach(() => {
 test("off by default, first consent, source picker, indicator and one-click stop", async () => {
   const onError = vi.fn();
   render(<SnapshotControls noteId="n1" status="recording" onError={onError} />);
-  fireEvent.click(screen.getByText("Add screen snapshots"));
-  const start = await screen.findByText("Start snapshots");
+  fireEvent.click(screen.getByText("Take pictures of my screen"));
+  const start = await screen.findByText("Start taking pictures");
   expect((start as HTMLButtonElement).disabled).toBe(true);
   expect(screen.getByText(/private messages/)).toBeTruthy();
   fireEvent.click(
@@ -53,20 +53,20 @@ test("off by default, first consent, source picker, indicator and one-click stop
     target: { value: "window:2" },
   });
   fireEvent.click(start);
-  await screen.findByText("Screen snapshots on · 1");
+  await screen.findByText("Taking screen pictures · 1");
   expect(invoke).toHaveBeenCalledWith("snapshot_control", {
     action: "enable",
     source: "window:2",
     confirmed: true,
   });
   fireEvent.click(screen.getByText("Turn off"));
-  await screen.findByText("Add screen snapshots");
+  await screen.findByText("Take pictures of my screen");
   expect(onError).not.toHaveBeenCalled();
 });
 test("stopped capture cannot enable snapshots", () => {
   render(<SnapshotControls noteId={null} status="stopped" onError={vi.fn()} />);
   expect(
-    (screen.getByText("Add screen snapshots") as HTMLButtonElement).disabled,
+    (screen.getByText("Take pictures of my screen") as HTMLButtonElement).disabled,
   ).toBe(true);
 });
 test("gallery timestamps, exclusion, deletion, unsupported model and explicit cloud confirmation", async () => {
@@ -83,7 +83,7 @@ test("gallery timestamps, exclusion, deletion, unsupported model and explicit cl
       excluded: true,
     }),
   );
-  fireEvent.click(screen.getByLabelText("Delete snapshot at 0:10"));
+  fireEvent.click(screen.getByLabelText("Delete picture at 0:10"));
   await waitFor(() =>
     expect(data).toHaveBeenCalledWith("snapshot_delete", {
       id: "n1",
@@ -98,7 +98,7 @@ test("gallery timestamps, exclusion, deletion, unsupported model and explicit cl
   expect(invoke).not.toHaveBeenCalledWith("snapshot_ai_status", {
     confirmed: true,
   });
-  fireEvent.click(screen.getByText("Allow images for this provider"));
+  fireEvent.click(screen.getByText("Allow images for this service"));
   await waitFor(() =>
     expect(invoke).toHaveBeenCalledWith("snapshot_ai_status", {
       confirmed: true,
