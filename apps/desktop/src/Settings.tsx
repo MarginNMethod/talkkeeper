@@ -1,3 +1,4 @@
+import { CopyDiagnostics } from "./CopyDiagnostics";
 import { McpSettings } from "./McpSettings";
 import { CalendarSettings } from "./Calendar";
 import { DictationSettings, type Config } from "./Dictation";
@@ -97,9 +98,10 @@ export function Settings({
   return (
     <section className="settings">
       <h2>Settings</h2>
+      <CopyDiagnostics />
       <section aria-label="Recording">
         <h3>Recording</h3>
-        <p>Using your computer’s default microphone.</p>{" "}
+        <p>Automatic selection prefers the built-in microphone on macOS. Choose a microphone in the recording bar.</p>{" "}
         <label>
           Language spoken in your meetings
           <select

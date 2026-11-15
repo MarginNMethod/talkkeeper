@@ -1,3 +1,4 @@
+import { CopyDiagnostics } from "./CopyDiagnostics";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { invoke, type Preferences, data } from "./api";
 import { CaptureFeedback, describeRecordingError } from "./CaptureFeedback";
@@ -114,6 +115,12 @@ export interface RecordBarProps {
 }
 export function RecordBar(p: RecordBarProps) {
   const [devices, setDevices] = useState<string[]>([]);
+  const [usingMicrophone, setUsingMicrophone] = useState("");
+  useEffect(() => {
+    let mounted = true;
+    void invoke<string | null>("current_microphone").then(name => { if (mounted && typeof name === "string") setUsingMicrophone(name); }).catch(() => {});
+    return () => { mounted = false; };
+  }, [p.state]);
   const [microphone, setMicrophone] = useState("");
   const [deviceMessage, setDeviceMessage] = useState("");
   useEffect(() => {
@@ -127,9 +134,9 @@ export function RecordBar(p: RecordBarProps) {
       const saved = prefs.meeting_microphone ?? "";
       setMicrophone(available.includes(saved) ? saved : "");
       if (saved && !available.includes(saved))
-        setDeviceMessage("Your saved microphone is unavailable. Using the system default microphone.");
+        setDeviceMessage("Your saved microphone is unavailable. Using automatic microphone selection.");
     }).catch(() => {
-      if (mounted) setDeviceMessage("Microphones couldn't be listed. Using the system default microphone.");
+      if (mounted) setDeviceMessage("Microphones couldn't be listed. Using automatic microphone selection.");
     });
     return () => { mounted = false; };
   }, []);
@@ -200,13 +207,13 @@ export function RecordBar(p: RecordBarProps) {
               ? "Record more"
               : "Record";
   const command =
-    p.state === "recording"
+    ["recording", "starting", "finishing"].includes(p.state)
       ? "stop_capture"
       : p.state === "paused"
         ? "resume_capture"
         : "start_capture";
   const main = () => {
-    if (!blocked && !["starting", "finishing"].includes(p.state))
+    if (!blocked)
       p.onCommand(command);
   };
   const mainRef = useRef(main);
@@ -281,7 +288,7 @@ export function RecordBar(p: RecordBarProps) {
           className={`record-main ${p.state === "recording" ? "is-stop" : ""} ${(p.hasTranscript || p.finished) && !active ? "is-more" : ""}`}
           title="Ctrl/Cmd+Shift+R"
           disabled={
-            !!blocked || p.state === "starting" || p.state === "finishing"
+            !!blocked
           }
           onClick={main}
         >
@@ -294,16 +301,17 @@ export function RecordBar(p: RecordBarProps) {
           </span>{" "}
           {blocked ? "Record" : label}
         </button>
-        {!active && !blocked && p.state === "stopped" && (
+        {(
           <label className="meeting-microphone">
             Microphone
-            <select aria-label="Meeting microphone" value={microphone}
+            <select aria-label="Meeting microphone" value={microphone} disabled={p.state !== "stopped"}
               onChange={event => void changeMicrophone(event.target.value)}>
-              <option value="">System default</option>
+              <option value="">Automatic microphone</option>
               {devices.map(device => <option key={device}>{device}</option>)}
             </select>
           </label>
         )}
+        {p.state !== "stopped" && <span>Using: {usingMicrophone || microphone || "Selecting microphone…"}</span>}
         {active && !blocked && (
           <>
             <span
@@ -364,7 +372,7 @@ export function RecordBar(p: RecordBarProps) {
           <button onClick={p.onStopDictation}>Stop dictation</button>
         )}
       </div>
-      {deviceMessage && <p role="status">{deviceMessage}</p>}
+      {deviceMessage && <p role="status">{deviceMessage} <CopyDiagnostics /></p>}
       {!blocked && (
         <>
           <p className="record-source">
@@ -393,6 +401,7 @@ export function RecordBar(p: RecordBarProps) {
           {problem && !p.download && !p.downloadReady && (
             <div className="record-problem" role="alert">
               <strong>{problem.title}</strong>
+              <CopyDiagnostics />
               <p>{problem.body}</p>
               <button
                 onClick={

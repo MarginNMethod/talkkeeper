@@ -44,6 +44,7 @@ let screenEnabled = false;
 let captureNote = "";
 let captureState = "stopped";
 let captureStarted = 0;
+let cancelStart: (() => void) | undefined;
 const recordingTest = new URLSearchParams(location.search).has("recording");
 const recordingLines: Record<string, Record<string, unknown>[]> = {};
 function emit(event: string, payload: unknown) {
@@ -227,6 +228,8 @@ mockIPC(async (command, args) => {
     if (a.action === "add") calendarAdded = true;
     return { count: 1 };
   }
+  if (command === "current_microphone") return recordingPreferences.meeting_microphone || "Built-in microphone";
+  if (command === "diagnostics_report") return "TalkKeeper diagnostics: Built-in microphone";
   if (command === "list_input_devices")
     return ["Built-in microphone", "USB microphone"];
   if (command === "recording_preferences") {
@@ -246,6 +249,7 @@ mockIPC(async (command, args) => {
   if (["stop_capture", "pause_capture", "resume_capture"].includes(command)) {
     if (a.noteId !== captureNote)
       throw new Error("Recording belongs to another note");
+    const cancelled = captureState === "starting";
     captureState =
       command === "stop_capture"
         ? "stopped"
@@ -256,8 +260,9 @@ mockIPC(async (command, args) => {
       note_id: captureNote,
       state: captureState,
       elapsed_ms: Date.now() - captureStarted,
+      cancelled,
     });
-    if (captureState === "stopped") captureNote = "";
+    if (captureState === "stopped") { captureNote = ""; cancelStart?.(); cancelStart = undefined; }
     return;
   }
   if (command === "capture_capabilities") return { system_audio: false };
@@ -265,6 +270,12 @@ mockIPC(async (command, args) => {
   if (command === "start_capture") {
     captureNote = String(a.noteId);
     captureStarted = Date.now();
+    if (new URLSearchParams(location.search).has("starting")) {
+      captureState = "starting";
+      emit("capture://state", { note_id: captureNote, state: "starting" });
+      await new Promise<void>(resolve => { cancelStart = resolve; });
+      throw new Error("Recording cancelled");
+    }
     captureState = "recording";
     emit("capture://state", { note_id: captureNote, state: "recording" });
     if (recordingTest) {

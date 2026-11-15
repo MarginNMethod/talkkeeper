@@ -154,6 +154,8 @@ export function App() {
         .catch(() => {});
   }, [notes]);
   const startPending = useRef(false);
+  const startCancelled = useRef(false);
+  const startInvoked = useRef(false);
   const captureRef = useRef<string | null>(null);
   const captureState = useRef("stopped");
   const restart = useRef(false);
@@ -295,6 +297,7 @@ export function App() {
         state: string;
         elapsed_ms?: number;
         error?: string;
+        cancelled?: boolean;
       }>("capture://state", (e) => {
         const event = e.payload;
         const time =
@@ -305,6 +308,7 @@ export function App() {
               : 0);
         clock.current = { elapsed: time, at: Date.now() };
         setElapsed(time);
+        const cancelledStart = event.cancelled || (captureState.current === "starting" && event.state === "stopped");
         captureState.current = event.state;
         captureRef.current = event.state === "stopped" ? null : event.note_id;
         setStatus(event.state);
@@ -317,7 +321,7 @@ export function App() {
           setAutoStop(false);
           setDownload(null);
           setDownloadReady(false);
-          setFinishedNote(event.note_id);
+          setFinishedNote(cancelledStart ? null : event.note_id);
           setDurations((d) => ({
             ...d,
             [event.note_id]: (d[event.note_id] ?? 0) + time,
@@ -530,7 +534,18 @@ export function App() {
     const start = command === "start_capture";
     if (start && startPending.current) return;
     if (!start && id !== captureRef.current) return;
+    if (command === "stop_capture" && startPending.current && !startInvoked.current) {
+      startCancelled.current = true;
+      captureRef.current = null;
+      captureState.current = "stopped";
+      setCaptureNote(null);
+      setStarting(false);
+      setStatus("stopped");
+      return;
+    }
     if (start) {
+      startCancelled.current = false;
+      startInvoked.current = false;
       captureRef.current = id;
       captureState.current = "starting";
       setCaptureNote(id);
@@ -556,6 +571,8 @@ export function App() {
         if (checked !== "success") return;
       }
       await flush();
+      if (start && startCancelled.current) return;
+      if (start) startInvoked.current = true;
       await invoke(command, { noteId: id });
     } catch (e) {
       const text = String(e);

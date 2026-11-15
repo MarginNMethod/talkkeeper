@@ -39,6 +39,7 @@ struct AppState {
     store: Arc<Mutex<Store>>,
     directory: PathBuf,
     capture: Mutex<Option<session::ActiveCapture>>,
+    recording_diagnostics: Mutex<session::RecordingDiagnostics>,
     clipboard: Mutex<Option<arboard::Clipboard>>,
     snapshots: Mutex<snapshots::SnapshotSession>,
 }
@@ -632,6 +633,7 @@ fn main() {
                 store: Arc::new(Mutex::new(store)),
                 directory,
                 capture: Mutex::new(None),
+                recording_diagnostics: Mutex::new(session::RecordingDiagnostics::default()),
                 snapshots: Mutex::new(snapshots::SnapshotSession::default()),
                 clipboard: Mutex::new(None),
             });
@@ -669,6 +671,8 @@ fn main() {
             snapshots::snapshot_control,
             snapshots::snapshot_ai_status,
             session::capture_status,
+            session::current_microphone,
+            session::diagnostics_report,
             session::list_input_devices,
             session::recording_preferences,
             session::cancel_model_download,
@@ -698,6 +702,7 @@ mod tests {
             store: Arc::new(Mutex::new(Store::open_in_memory().unwrap())),
             directory: std::env::temp_dir().join(Uuid::new_v4().to_string()),
             capture: Mutex::new(None),
+            recording_diagnostics: Mutex::new(session::RecordingDiagnostics::default()),
             snapshots: Mutex::new(snapshots::SnapshotSession::default()),
             clipboard: Mutex::new(None),
         }

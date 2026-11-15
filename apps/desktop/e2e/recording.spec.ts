@@ -23,7 +23,7 @@ test("record bar counts time, stops, and scopes controls across notes", async ({
   await expect(bar.locator(".record-timer")).toHaveText("0:01", {
     timeout: 4000,
   });
-  await expect(bar.getByText("Microphone", { exact: true })).toBeVisible();
+  await expect(bar.getByLabel("Meeting microphone")).toBeVisible();
   await bar.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(
     bar.getByRole("button", { name: "Record more", exact: true }),
@@ -77,4 +77,20 @@ test("meeting microphone choice persists when reopening a note", async ({
   await expect(
     page.getByRole("button", { name: "Stop", exact: true }),
   ).toBeVisible();
+});
+
+test("cancel during startup returns to Record and diagnostics is in Settings", async ({ page }) => {
+  await page.route("**/?recording&starting", async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, body: (await response.text()).replace("/src/main.tsx", "/e2e/harness.ts") });
+  });
+  await page.goto("/?recording&starting");
+  await page.getByRole("button", { name: "New note", exact: true }).click();
+  await page.getByRole("button", { name: "Record", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Record", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Copy diagnostics", exact: true }).click();
+  await expect(page.getByText("Copied", { exact: true })).toBeVisible();
 });
