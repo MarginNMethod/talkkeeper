@@ -2,6 +2,7 @@
 pub mod archive;
 mod catalog;
 pub mod runtime;
+mod speech;
 pub use catalog::*;
 use futures_util::StreamExt;
 pub use runtime::OllamaRuntime;
@@ -16,7 +17,7 @@ pub enum Error {
     Offline,
     #[error("Downloads are blocked. Allow TalkKeeper through your firewall or network filter, then retry.")]
     Blocked,
-    #[error("This computer has too little memory for local AI. Use your own AI provider in Advanced settings.")]
+    #[error("This computer has too little memory for local AI. Connect your own AI provider.")]
     Memory,
     #[error("Not enough storage. Free space on the application drive, then retry.")]
     Disk,
@@ -28,11 +29,13 @@ pub enum Error {
     Archive,
     #[error("The model catalog is invalid. Restore the bundled catalog or update TalkKeeper.")]
     Catalog,
-    #[error("Automatic setup is unavailable on this platform. Choose your own provider in Advanced settings.")]
+    #[error("Automatic setup is unavailable on this platform. Connect your own AI provider.")]
     Unsupported,
-    #[error("Setup cancelled. You can resume by choosing Set up automatically.")]
+    #[error("Download paused. Choose Resume to carry on.")]
     Cancelled,
-    #[error("The AI model did not answer. Free memory and retry, or choose a smaller model in Advanced settings.")]
+    #[error(
+        "The AI model did not answer. Free memory and retry, or connect your own AI provider."
+    )]
     Verify,
     #[error("The speech model could not be downloaded. Check your connection and free storage, then retry.")]
     Speech,
@@ -59,6 +62,7 @@ pub enum Stage {
     StartRuntime,
     PullModel,
     DownloadSpeechModel,
+    SpeechReady,
     Verify,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,6 +87,7 @@ impl Progress {
 #[derive(Debug, Deserialize)]
 pub struct PullProgress {
     pub status: Option<String>,
+    pub digest: Option<String>,
     pub completed: Option<u64>,
     pub total: Option<u64>,
     pub error: Option<String>,
@@ -147,8 +152,42 @@ impl Setup {
         tokio::select! {
             biased;
             _ = cancel_token.cancelled() => Err(Error::Cancelled),
-            result = self.run(plan, &on_progress) => result,
+            result = async {
+                let mut attempt = 0;
+                loop {
+                    match self.run(plan, &on_progress).await {
+                        Err(error @ (Error::Offline | Error::Checksum | Error::Archive)) => {
+                            let message = if matches!(error,Error::Offline) { "Waiting for the internet. Your download is saved and will carry on by itself." } else { "The download was damaged. We'll fetch that part again. Nothing else is lost." };
+                            on_progress(Progress::new(Stage::Check, 0, 0, message));
+                            let seconds = [5, 15, 60][attempt.min(2)];
+                            attempt += 1;
+                            tokio::time::sleep(Duration::from_secs(seconds)).await;
+                        }
+                        result => break result,
+                    }
+                }
+            } => result,
         }
+    }
+    pub async fn download_speech(
+        &self,
+        plan: &Plan,
+        progress: &(impl Fn(Progress) + Send + Sync),
+    ) -> Result<()> {
+        let speech = talkkeeper_transcribe::models::MODELS
+            .iter()
+            .find(|m| m.name == plan.whisper.model)
+            .ok_or(Error::Catalog)?;
+        #[cfg(test)]
+        let speech = self.test_speech.as_ref().unwrap_or(speech);
+        speech::download(&self.directory, speech, progress).await?;
+        progress(Progress::new(
+            Stage::SpeechReady,
+            1,
+            1,
+            "Recording is ready",
+        ));
+        Ok(())
     }
     async fn run(
         &self,
@@ -201,6 +240,8 @@ impl Setup {
             1,
             "Your computer is ready for setup",
         ));
+        self.download_speech(plan, progress).await?;
+
         let runtime = if runtime::is_running(&client, external).await {
             progress(Progress::new(
                 Stage::DownloadRuntime,
@@ -255,7 +296,7 @@ impl Setup {
             ));
             runtime
         };
-        provision(&runtime, &client, plan, &self.directory, speech, progress).await?;
+        provision(&runtime, &client, plan, progress).await?;
         Ok(runtime)
     }
 }
@@ -305,6 +346,7 @@ pub async fn pull_model(
     let mut stream = response.bytes_stream();
     let mut pending = Vec::new();
     let mut success = false;
+    let mut layers = std::collections::HashMap::new();
     while let Some(bytes) = stream.next().await {
         pending.extend_from_slice(&bytes.map_err(|_| Error::Offline)?);
         if pending.len() > 1_048_576 {
@@ -317,10 +359,19 @@ pub async fn pull_model(
             }
             let p = parse_pull(std::str::from_utf8(&line).map_err(|_| Error::Verify)?)?;
             success |= p.status.as_deref() == Some("success");
+            if let Some(total) = p.total {
+                layers.insert(
+                    p.digest.unwrap_or_default(),
+                    (p.completed.unwrap_or(0), total),
+                );
+            }
+            let (completed, total) = layers
+                .values()
+                .fold((0, 0), |(done, size), (d, t)| (done + d, size + t));
             progress(Progress::new(
                 Stage::PullModel,
-                p.completed.unwrap_or(0),
-                p.total.unwrap_or(0),
+                completed,
+                total,
                 "Downloading and checking your AI model",
             ));
         }
@@ -375,28 +426,9 @@ async fn provision(
     runtime: &OllamaRuntime,
     client: &reqwest::Client,
     plan: &Plan,
-    directory: &std::path::Path,
-    model: &talkkeeper_transcribe::models::Model,
     progress: &(impl Fn(Progress) + Send + Sync),
 ) -> Result<()> {
     pull_model(&runtime.base_url, client, &plan.llm.ollama_tag, progress).await?;
-    progress(Progress::new(
-        Stage::DownloadSpeechModel,
-        0,
-        0,
-        "Downloading your speech model",
-    ));
-    talkkeeper_transcribe::models::ModelManager::new(directory)
-        .download(model, |done, total| {
-            progress(Progress::new(
-                Stage::DownloadSpeechModel,
-                done,
-                total,
-                "Downloading and checking your speech model",
-            ))
-        })
-        .await
-        .map_err(|_| Error::Speech)?;
     progress(Progress::new(
         Stage::Verify,
         0,
@@ -404,7 +436,7 @@ async fn provision(
         "Checking that your AI can answer",
     ));
     verify_model(&runtime.base_url, &plan.llm.ollama_tag).await?;
-    progress(Progress::new(Stage::Verify, 1, 1, "You're ready"));
+    progress(Progress::new(Stage::Verify, 1, 1, "AI notes are ready"));
     Ok(())
 }
 

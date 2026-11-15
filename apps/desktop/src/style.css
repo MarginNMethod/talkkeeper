@@ -302,3 +302,16 @@ meter {
 .snapshot-gallery { display: flex; flex-wrap: wrap; gap: 1rem; }
 .snapshot-gallery figure { margin: 0; max-width: 320px; }
 .snapshot-thumbnail { width: 100%; height: auto; }
+.setup-welcome { max-width: 440px; margin: auto; }
+button.primary { background: var(--accent); color: white; }
+.setup-card { padding: 12px; border: 1px solid #aaa; font-size: .85rem; margin-top: auto; }
+.setup-card p { margin: 6px 0; }
+.setup-card progress { width: 85%; }
+.setup-card .checking { animation: setup-check 1s ease-in-out infinite alternate; }
+@keyframes setup-check { to { opacity: .4; } }
+.setup-spinner { display: inline-block; width: 1em; height: 1em; margin-right: .5em; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: setup-spin 1s linear infinite; }
+@keyframes setup-spin { to { transform: rotate(360deg); } }
+.setup-first-note .tiptap p:only-child:has(> br:only-child)::before { content: "Type your notes here. Press Record to capture what's said."; float: left; height: 0; color: var(--muted); pointer-events: none; }
+.setup-card progress { accent-color: var(--accent); }
+.setup-card progress::-webkit-progress-value { background: var(--accent); }
+.setup-card progress::-moz-progress-bar { background: var(--accent); }

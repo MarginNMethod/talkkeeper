@@ -14,6 +14,8 @@ import { Transcript } from "./Transcript";
 import { Settings } from "./Settings";
 import { Templates } from "./Templates";
 import { Setup } from "./Setup";
+import { SetupCard } from "./SetupCard";
+import { useSetup } from "./useSetup";
 import { People, Attendees, type Person } from "./People";
 import { WorkspaceChat } from "./WorkspaceChat";
 import { Chat } from "./Chat";
@@ -55,12 +57,21 @@ export function App() {
   const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
   const [citationSeq, setCitationSeq] = useState<number | null>(null);
   useEffect(() => { if (citationSeq !== null && !workspaceChat) document.getElementById(`segment-${citationSeq}`)?.scrollIntoView?.({ behavior: "smooth" }); }, [segments, workspaceChat, citationSeq]);
-  const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null);
-  useEffect(() => {
-    void invoke<{ completed: boolean; custom: boolean }>("setup_status")
-      .then((s) => setSetupNeeded(!s.completed && !s.custom))
-      .catch(fail);
-  }, []);
+  const setup = useSetup();
+  const [setupChoice, setSetupChoice] = useState(false);
+  const [firstRunNote,setFirstRunNote] = useState<string | null>(null);
+  useEffect(()=>{
+    if(!firstRunNote || note?.id !== firstRunNote) return;
+    const focus = () => {
+      const editor = document.querySelector<HTMLElement>('[aria-label="Rough notes"]');
+      if(editor) { editor.focus(); observer.disconnect(); }
+    };
+    const observer = new MutationObserver(focus);
+    observer.observe(document.body,{childList:true,subtree:true});
+    const frame = requestAnimationFrame(focus);
+    return ()=>{observer.disconnect();cancelAnimationFrame(frame);};
+  },[firstRunNote,note?.id]);
+  const setupNeeded = !setupChoice && !setup.started && setup.status !== null && !setup.status.completed && !setup.status.custom;
   const current = useRef<Note | null>(null),
     saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     saveQueue = useRef(Promise.resolve());
@@ -123,7 +134,6 @@ export function App() {
         setLevels((l) => ({ ...l, [e.payload.source]: e.payload.level })),
       ),
       listen<{note_id:string; kind:string; active:boolean}>("capture://warning", e => setWarning(e.payload)),
-      listen<string>("setup://error", (e) => fail(e.payload)),
       listen("capture://auto-stop-suggested", () => setAutoStop(true)),
       listen<{ downloaded: number; total: number }>("model://progress", (e) =>
         setProgress(
@@ -178,14 +188,17 @@ export function App() {
     setTemplate(n.template_id ?? "auto");
     setSegments(await data("segments", { id: n.id }));
   }
-  async function create() {
+  async function create(firstRun = false) {
     await flush();
     const n = await data<Note>("start_note", {});
+    if(firstRun) { n.title="Untitled meeting"; await data("update",n);setFirstRunNote(n.id); }
+    setSetupChoice(true);
     await select(n);
     await refresh();
   }
   async function enhance() {
     if (!note) return;
+    if (!setup.aiReady) { setProgress(setup.status?.ai === "skipped" ? "AI notes aren't set up on this computer." : setup.eta === "working out time left…" ? "AI notes unlock when the download finishes · working out time left…" : `AI notes will be ready in ${setup.eta.replace(/ left$/, "")}`); return; }
     await flush();
     setEnhancing(true);
     setNote((n) => (n ? { ...n, summary_markdown: "" } : n));
@@ -216,6 +229,10 @@ export function App() {
     if (start && startPending.current) return;
     if (start) { startPending.current = true; setStarting(true); setError(""); setWarning(null); setLevels({}); }
     try {
+      if (start && setup.status?.mic_checked === false) {
+        const checked = await setup.checkMicrophone();
+        if (checked !== "success") return;
+      }
       await flush();
       await invoke(command, { noteId: note?.id });
       if (start) setNotice(await data<string>("notice"));
@@ -234,25 +251,24 @@ export function App() {
   return (
     <>
       {status !== "stopped" && <aside role="status" aria-label="Capture indicator">Capture {status}<button onClick={() => void invoke("stop_capture").catch(fail)}>Stop capture</button></aside>}
+      {setup.quitRequested && <section role="dialog" aria-label="Setup isn't finished yet"><h2>Setup isn't finished yet</h2><p>If you quit now, the download pauses and carries on next time you open TalkKeeper.</p><button onClick={()=>setup.setQuitRequested(false)}>Keep TalkKeeper open</button><button onClick={()=>void setup.quit()}>Quit anyway</button><label><input type="checkbox" checked={setup.dontAsk} onChange={e=>setup.setDontAsk(e.target.checked)} />Don't ask again</label></section>}
       <CalendarAutoCapture active={status !== "stopped"} onOpen={async n => { await select(n); await refresh(); }} onError={fail} />
       <CalendarReminder onOpen={n => void select(n).then(refresh).catch(fail)} onError={fail} />
-      <SnapshotControls noteId={captureNote} status={status} onError={fail} />
+      {status !== "stopped" && <SnapshotControls noteId={captureNote} status={status} onError={fail} />}
     <main>
       <aside className="sidebar">
         <h1>TalkKeeper</h1>
-        <button onClick={() => void flush().then(() => { setAgenda(true); setWorkspaceChat(false); setDirectory(null); }).catch(fail)}>Today &amp; upcoming</button>
+        <button onClick={() => void flush().then(() => { setSetupChoice(true); setAgenda(true); setWorkspaceChat(false); setDirectory(null); }).catch(fail)}>Today &amp; upcoming</button>
         <button
-          disabled={setupNeeded !== false}
           onClick={() =>
             void flush()
-              .then(() => { setAgenda(false); setWorkspaceChat(true); })
+              .then(() => { setSetupChoice(true); setAgenda(false); setWorkspaceChat(true); })
               .catch(fail)
           }
         >
           Ask your notes
         </button>
         <button
-          disabled={setupNeeded !== false}
           onClick={() => void create().catch(fail)}
         >
           New note
@@ -265,6 +281,7 @@ export function App() {
         />
         <button
           onClick={() => {
+            setSetupChoice(true);
             setDirectory(null);
             setTrash(false);
             setAgenda(false);
@@ -278,6 +295,7 @@ export function App() {
             onClick={() =>
               void flush()
                 .then(() => {
+                  setSetupChoice(true);
                   setPersonId(undefined);
                   setDirectory(kind);
                   setAgenda(false);
@@ -288,7 +306,7 @@ export function App() {
             {kind === "people" ? "People" : "Companies"}
           </button>
         ))}
-        <button onClick={() => { setAgenda(false); setDirectory(null); setTrash(true); }}>Trash</button>
+        <button onClick={() => { setSetupChoice(true); setAgenda(false); setDirectory(null); setTrash(true); }}>Trash</button>
         <label>
           Folder
           <select value={folder} onChange={(e) => setFolder(e.target.value)}>
@@ -368,6 +386,7 @@ export function App() {
               </div>
             ))}
         </nav>
+        <SetupCard setup={setup} systemAudio={systemAudio} showOffer={setupChoice} />
         <button
           onClick={() =>
             void data<Preferences>("settings").then(setSettings).catch(fail)
@@ -376,7 +395,7 @@ export function App() {
           Settings
         </button>
       </aside>
-      <div className="workspace">
+      <div className={`workspace${note?.id === firstRunNote ? " setup-first-note" : ""}`}>
         {error && (
           <div role="alert">
             {error}
@@ -385,39 +404,28 @@ export function App() {
           </div>
         )}
         {progress && <p role="status">{progress}</p>}
+        {setup.justCompleted && status === "stopped" && !saveTimer.current && <section role="status">
+          {setup.status?.mic_checked ? <><h2>✓ TalkKeeper is fully set up</h2><p>Recording and AI notes both work, and everything stays on this computer.</p><button onClick={()=>void create().catch(fail)}>Start a note</button></> : <><p>AI notes are ready. One thing left: check your microphone.</p><button onClick={()=>void setup.checkMicrophone()}>Check my microphone</button></>}
+          <button onClick={()=>setup.setJustCompleted(false)}>Dismiss</button>
+        </section>}
+        {settings && setup.speechReady && <button onClick={()=>void setup.checkMicrophone()}>Check my microphone</button>}
         {settings ? (
           <Settings
             initial={settings}
             onClose={() => {
               setSettings(null);
-              void invoke<{ completed: boolean; custom: boolean }>(
-                "setup_status",
-              )
-                .then((s) => setSetupNeeded(!s.completed && !s.custom))
-                .catch(fail);
+              void setup.refresh();
             }}
             onError={fail}
           />
-        ) : setupNeeded !== false ? (
-          setupNeeded === null ? (
-            <p role="status">Checking setup…</p>
-          ) : (
-            <Setup
-              onReady={() => {
-                setSetupNeeded(false);
-                void create().catch(fail);
-              }}
-              onAdvanced={() =>
-                void data<Preferences>("settings")
-                  .then((p) => setSettings({ ...p, provider: "Ollama" }))
-                  .catch(fail)
-              }
-            />
-          )
+        ) : setup.statusError && !setupChoice ? (
+          <section role="alert"><p>TalkKeeper couldn't open its saved settings.</p><button onClick={() => void setup.refresh()}>Try again</button><button onClick={setup.startAnyway}>Start anyway</button></section>
+        ) : setupNeeded ? (
+          <Setup setup={setup} onStart={() => { setSetupChoice(true); void create(true).catch(fail); }} />
         ) : agenda ? (
           <Agenda onOpen={n => void select(n).then(refresh).catch(fail)} onError={fail} />
         ) : workspaceChat ? (
-          <WorkspaceChat
+          !setup.aiReady ? <p role="status">Ask your notes will be ready when the AI model finishes downloading ({setup.eta}).</p> : <WorkspaceChat
             selected={selectedNotes}
             folders={folders}
             onOpen={(id, seq) => {
@@ -552,10 +560,12 @@ export function App() {
               </select>
             </label>
             <div className="capture">
+              {!setup.speechReady && <p>Recording will be ready in about a minute. You can type notes now.</p>}
+              {setup.speechReady && !setup.aiReady && <p>You can record now. AI notes will be written when the AI model finishes downloading.</p>}
               <p>Obtain participant consent before recording.</p>
               <CaptureFeedback systemAudio={systemAudio} warning={warning?.note_id === note.id && warning.active ? warning.kind : null} onError={fail} />
               <button
-                disabled={starting || status !== "stopped" || trash}
+                disabled={!setup.speechReady || starting || status !== "stopped" || trash}
                 onClick={() => void capture("start_capture").catch(fail)}
               >
                 {starting ? "Starting…" : "Start capture"}
@@ -625,6 +635,8 @@ export function App() {
                     update({ notes_doc, notes_markdown })
                   }
                 />
+                {setup.writingNote === note.id && <p role="status">Writing AI notes…</p>}
+                {!setup.aiReady && <p role="status">{status === "stopped" && segments.length ? "Recording saved. AI notes for this meeting will be written automatically when the AI model is ready." : setup.paused ? "AI notes are waiting. The download is paused." : setup.status?.ai === "skipped" ? "AI notes aren't set up on this computer." : setup.eta === "working out time left…" ? "AI notes unlock when the download finishes · working out time left…" : `AI notes will be ready in ${setup.eta.replace(/ left$/, "")}`}</p>}
                 <div className="summary-tools">
                   <label>
                     Template
@@ -640,7 +652,7 @@ export function App() {
                     </select>
                   </label>
                   <button
-                    disabled={enhancing || trash || !!note.summary_markdown}
+                    disabled={!setup.aiReady || enhancing || trash || !!note.summary_markdown}
                     onClick={() => void enhance()}
                   >
                     {enhancing
@@ -684,7 +696,7 @@ export function App() {
                 onCopy={<CopyTranscript note={note} segments={segments} />}
               />
             </div>
-            <Chat
+            {setup.aiReady ? <Chat
               onSettings={() =>
                 void data<Preferences>("settings").then(setSettings).catch(fail)
               }
@@ -699,7 +711,7 @@ export function App() {
                 setNote(n);
                 void refresh().catch(fail);
               }}
-            />
+            /> : <p>Available when the AI model finishes downloading.</p>}
           </>
         ) : (
           <section className="empty">
