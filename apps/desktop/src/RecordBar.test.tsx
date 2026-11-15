@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import {
@@ -14,6 +15,11 @@ import {
   type RecordBarProps,
 } from "./RecordBar";
 import { describeRecordingError } from "./CaptureFeedback";
+import { data, invoke } from "./api";
+vi.mock("./api", () => ({
+  data: vi.fn(async () => ({})),
+  invoke: vi.fn(async () => []),
+}));
 const base: RecordBarProps = {
   state: "stopped",
   elapsed: 0,
@@ -252,4 +258,21 @@ test("meter peaks fall even while quieter frames continue arriving", () => {
     });
   }
   expect(view.container.querySelectorAll(".level-bars .lit")).toHaveLength(0);
+});
+
+test("missing saved microphone uses system default and explains the fallback", async () => {
+  vi.mocked(data).mockResolvedValueOnce({meeting_microphone:"Old headset"});
+  vi.mocked(invoke).mockResolvedValueOnce(["USB microphone"]);
+  render(<RecordBar {...base} />);
+  await screen.findByText("Your saved microphone is unavailable. Using the system default microphone.");
+  expect((screen.getByLabelText("Meeting microphone") as HTMLSelectElement).value).toBe("");
+  fireEvent.change(screen.getByLabelText("Meeting microphone"), {target:{value:"USB microphone"}});
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("recording_preferences", {microphone:"USB microphone"}));
+  await waitFor(() => expect((screen.getByLabelText("Meeting microphone") as HTMLSelectElement).value).toBe("USB microphone"));
+});
+test("consent reminder disappears when a take stops", () => {
+  const view = render(<RecordBar {...base} />);
+  expect(screen.getByText(/Tell everyone before you record/)).toBeTruthy();
+  view.rerender(<RecordBar {...base} finished />);
+  expect(screen.queryByText(/Tell everyone before you record/)).toBeNull();
 });

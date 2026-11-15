@@ -695,3 +695,68 @@ meter {
 .setup-card progress::-moz-progress-bar {
   background: var(--accent);
 }
+
+/* Meeting input and the four note zones. */
+.meeting-microphone {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.record-consent {
+  position: fixed;
+  z-index: 100;
+  top: 15%;
+  left: 25%;
+  width: min(32rem, 70vw);
+  padding: 1.5rem;
+  background: var(--panel, white);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 32px #0003;
+}
+.note-workspace [role="tablist"] {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.note-workspace [role="tab"][aria-selected="true"] {
+  border-bottom: 3px solid var(--accent);
+}
+.note-workspace [role="tabpanel"] {
+  overflow: auto;
+  min-height: 16rem;
+  max-height: 60vh;
+}
+.note-question {
+  margin-top: 1rem;
+}
+.note-question > summary {
+  cursor: pointer;
+  padding: 0.75rem;
+}
+.note-metadata {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.note-work-area {
+  align-items: start;
+}
+.note-workspace,
+.note-transcript-zone {
+  min-width: 0;
+}
+.note-transcript-zone {
+  max-height: 65vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.note-workspace textarea {
+  width: 100%;
+  min-height: 16rem;
+}
+@media (max-width: 899px) {
+  .note-work-area {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

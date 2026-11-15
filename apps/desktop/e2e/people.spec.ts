@@ -15,6 +15,7 @@ test("attendees become people with history and can start a new note", async ({
   await page.goto("/");
   await page.getByRole("button", { name: "New note", exact: true }).click();
   await page.getByLabel("Note title").fill("Planning together");
+  await page.getByText("Add people", { exact: true }).click();
   await page
     .getByLabel("Who was there", { exact: true })
     .fill("Ada <ada@example.org>");
@@ -26,9 +27,7 @@ test("attendees become people with history and can start a new note", async ({
   await page
     .getByRole("button", { name: "Start a note with this person" })
     .click();
-  await expect(page.getByLabel("Note title")).toHaveValue(
-    "Untitled meeting",
-  );
+  await expect(page.getByLabel("Note title")).toHaveValue("Untitled meeting");
   await expect(page.getByLabel("Who was there", { exact: true })).toHaveValue(
     "Ada <ada@example.org>",
   );

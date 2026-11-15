@@ -51,8 +51,7 @@ export function Chat({
     redo: boolean;
     edit: boolean;
   } | null>(null);
-  const [revision, setRevision] = useState(false),
-    [instructions, setInstructions] = useState("");
+  const [revision, setRevision] = useState(false);
   async function reload() {
     setMessages((await data<Message[]>("chat_history", { id: note.id })) ?? []);
     setVersions((await data<Version[]>("versions", { id: note.id })) ?? []);
@@ -206,9 +205,7 @@ export function Chat({
             >
               Retry
             </button>
-            <button onClick={() => setShowSetup(true)}>
-              Run setup again
-            </button>
+            <button onClick={() => setShowSetup(true)}>Run setup again</button>
             <button onClick={onSettings}>Open Settings</button>
           </div>
         )}
@@ -242,7 +239,9 @@ export function Chat({
             />
             Let TalkKeeper edit my notes (you approve changes first)
           </label>
-          <button disabled={busy || locked || !question.trim() || !segments.length}>
+          <button
+            disabled={busy || locked || !question.trim() || !segments.length}
+          >
             Send
           </button>
         </form>
@@ -271,29 +270,6 @@ export function Chat({
             </details>
           </>
         )}
-      </section>
-      <section aria-label="Write it again">
-        <h2>Write it again</h2>
-        <label>
-          Anything to change? (optional)
-          <input
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-          />
-        </label>
-        <button
-          disabled={busy || locked || !segments.length}
-          onClick={() =>
-            void ask(
-              instructions ||
-                "Redo the notes using the selected source material",
-              true,
-              true,
-            )
-          }
-        >
-          Write it again
-        </button>
       </section>
     </>
   );

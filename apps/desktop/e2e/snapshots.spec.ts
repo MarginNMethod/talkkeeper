@@ -14,9 +14,7 @@ test("meeting snapshots require consent, show count and gallery, delete and keep
   });
   await page.goto("/");
   await page.getByRole("button", { name: "New note", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Record more", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Record more", exact: true }).click();
   await page
     .getByRole("button", { name: "Take pictures of my screen", exact: true })
     .click();
@@ -36,9 +34,7 @@ test("meeting snapshots require consent, show count and gallery, delete and keep
     .getByRole("button", { name: "Start taking pictures", exact: true })
     .click();
   await expect(
-    page
-      .getByRole("status")
-      .filter({ hasText: "Taking screen pictures · 1" }),
+    page.getByRole("status").filter({ hasText: "Taking screen pictures · 1" }),
   ).toBeVisible();
   const gallery = page.getByRole("region", {
     name: "Screen pictures",
@@ -57,14 +53,13 @@ test("meeting snapshots require consent, show count and gallery, delete and keep
     .click();
   await expect(gallery).toHaveCount(0);
   await expect(
-    page
-      .getByRole("status")
-      .filter({ hasText: "Taking screen pictures · 0" }),
+    page.getByRole("status").filter({ hasText: "Taking screen pictures · 0" }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Turn off", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Turn off", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Take pictures of my screen", exact: true }),
+    page.getByRole("button", {
+      name: "Take pictures of my screen",
+      exact: true,
+    }),
   ).toBeVisible();
 });

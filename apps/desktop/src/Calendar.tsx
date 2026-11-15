@@ -433,13 +433,15 @@ export function CalendarAutoCapture({
   active,
   onOpen,
   onError,
+  onRecord,
 }: {
   active: boolean;
+  onRecord: (id: string) => Promise<void>;
   onOpen: (n: Note) => Promise<void>;
   onError: (e: unknown) => void;
 }) {
-  const latest = useRef({ active, onOpen, onError });
-  latest.current = { active, onOpen, onError };
+  const latest = useRef({ active, onOpen, onError, onRecord });
+  latest.current = { active, onOpen, onError, onRecord };
   useEffect(() => {
     const seen = new Set<string>();
     let busy = false;
@@ -462,7 +464,7 @@ export function CalendarAutoCapture({
         seen.add(`${e.source_id}/${e.uid}/${e.instance_start}`);
         const note = await data<Note>("calendar_start", { event: e });
         await latest.current.onOpen(note);
-        await invoke("start_capture", { noteId: note.id });
+        await latest.current.onRecord(note.id);
       } catch (e) {
         latest.current.onError(e);
       } finally {

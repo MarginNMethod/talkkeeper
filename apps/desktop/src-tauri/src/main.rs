@@ -350,7 +350,10 @@ fn validate_settings(payload: &Value) -> Result<()> {
             "snapshots_preference"
                 if ["Ask each time", "Always on", "Never"]
                     .contains(&value.as_str().unwrap_or("")) => {}
-            "calendar_details" | "calendar_reminders" | "calendar_auto_capture"
+            "recording_consent_confirmed"
+            | "calendar_details"
+            | "calendar_reminders"
+            | "calendar_auto_capture"
                 if value.is_boolean() => {}
             "snapshot_retention" if value.as_u64().is_some_and(|n| n <= 36500) => {}
             "retention" if value.as_u64().is_some_and(|n| n <= 36500) => {}
@@ -361,7 +364,7 @@ fn validate_settings(payload: &Value) -> Result<()> {
                             .all(|v| v.as_str().is_some_and(|s| !s.trim().is_empty()))
                 }) => {}
             "calendar_email" | "base_url" | "stt_url" | "model" | "stt_model" | "language"
-            | "notice"
+            | "notice" | "meeting_microphone"
                 if value.is_string() => {}
             _ => return Err(format!("Invalid or unknown setting: {key}")),
         }
@@ -666,6 +669,8 @@ fn main() {
             snapshots::snapshot_control,
             snapshots::snapshot_ai_status,
             session::capture_status,
+            session::list_input_devices,
+            session::recording_preferences,
             session::cancel_model_download,
             session::capture_capabilities,
             session::open_microphone_settings,

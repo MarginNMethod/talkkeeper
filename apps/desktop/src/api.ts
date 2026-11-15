@@ -32,6 +32,8 @@ export interface Template {
   built_in: boolean;
 }
 export interface Preferences {
+  meeting_microphone?: string;
+  recording_consent_confirmed?: boolean;
   calendar_details?: boolean;
   calendar_email?: string;
   calendar_reminders?: boolean;
