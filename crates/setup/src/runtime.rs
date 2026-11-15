@@ -128,18 +128,53 @@ pub async fn install(
 ) -> Result<PathBuf> {
     std::fs::create_dir_all(directory)?;
     let staging = std::sync::Arc::new(tempfile::tempdir_in(directory)?);
-    let archive_path = staging.path().join("download");
-    let response = client
-        .get(&source.url)
-        .send()
+    // Keep the archive between launches; installation still uses isolated extraction.
+    let archive_path = directory.join("engine.download");
+    let identity_path = directory.join("engine.source");
+    let identity = format!("{}\n{:?}", source.url, source.checksum);
+    if tokio::fs::read_to_string(&identity_path)
         .await
-        .map_err(crate::download_error)?
-        .error_for_status()
-        .map_err(crate::download_error)?;
-    let total = response.content_length().unwrap_or(0);
-    let mut file = tokio::fs::File::create(&archive_path).await?;
+        .ok()
+        .as_deref()
+        != Some(&identity)
+    {
+        let _ = tokio::fs::remove_file(&archive_path).await;
+        tokio::fs::write(&identity_path, &identity).await?;
+    }
+    let saved = tokio::fs::metadata(&archive_path)
+        .await
+        .map(|m| m.len())
+        .unwrap_or(0);
+    let mut request = client.get(&source.url);
+    if saved > 0 {
+        request = request.header(reqwest::header::RANGE, format!("bytes={saved}-"));
+    }
+    let response = request.send().await.map_err(crate::download_error)?;
+    let response = if response.status() == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
+        client
+            .get(&source.url)
+            .send()
+            .await
+            .map_err(crate::download_error)?
+    } else {
+        response
+    };
+    let response = response.error_for_status().map_err(crate::download_error)?;
+    let offset = if response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
+        saved
+    } else {
+        0
+    };
+    let total = response.content_length().unwrap_or(0) + offset;
+    let mut file = tokio::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(offset > 0)
+        .truncate(offset == 0)
+        .open(&archive_path)
+        .await?;
     let mut bytes = response.bytes_stream();
-    let mut completed = 0;
+    let mut completed = offset;
     while let Some(part) = bytes.next().await {
         let part = part.map_err(crate::download_error)?;
         file.write_all(&part).await?;
@@ -166,15 +201,21 @@ pub async fn install(
     let checksum = source.checksum.clone();
     // Keep the temporary directory alive in the worker when cancellation drops
     // this future. It is removed after extraction stops, with no partial install.
-    tokio::task::spawn_blocking(move || -> Result<()> {
+    let verification_path = staging.path().join("download");
+    tokio::fs::copy(&archive_path, &verification_path).await?;
+    let unpack_result = tokio::task::spawn_blocking(move || -> Result<()> {
         let _staging = worker_staging;
         if let Some(sum) = checksum {
-            archive::verify_checksum(&archive_path, &sum)?;
+            archive::verify_checksum(&verification_path, &sum)?;
         }
-        archive::extract(&archive_path, &format, &worker_extracted)
+        archive::extract(&verification_path, &format, &worker_extracted)
     })
     .await
-    .map_err(|_| Error::Archive)??;
+    .map_err(|_| Error::Archive)?;
+    if let Err(error) = unpack_result {
+        let _ = tokio::fs::remove_file(&archive_path).await;
+        return Err(error);
+    }
     let binary = find_binary(&extracted).ok_or(Error::Archive)?;
     #[cfg(unix)]
     {
@@ -198,6 +239,7 @@ pub async fn install(
         std::fs::remove_dir_all(&final_dir)?;
     }
     std::fs::rename(extracted, &final_dir)?;
+    let _ = tokio::fs::remove_file(&archive_path).await;
     find_binary(&final_dir).ok_or(Error::Archive)
 }
 pub fn find_binary(root: &Path) -> Option<PathBuf> {

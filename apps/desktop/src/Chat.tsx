@@ -51,8 +51,7 @@ export function Chat({
     redo: boolean;
     edit: boolean;
   } | null>(null);
-  const [revision, setRevision] = useState(false),
-    [instructions, setInstructions] = useState("");
+  const [revision, setRevision] = useState(false);
   async function reload() {
     setMessages((await data<Message[]>("chat_history", { id: note.id })) ?? []);
     setVersions((await data<Version[]>("versions", { id: note.id })) ?? []);
@@ -68,8 +67,8 @@ export function Chat({
             ["localhost", "127.0.0.1", "[::1]"].includes(host));
         setPrivacy(
           local
-            ? "Local AI: this conversation stays on your machine."
-            : `Cloud provider active (${p.provider}): note content is sent to your selected endpoint.`,
+            ? "Everything stays on this computer."
+            : `Online service active (${p.provider}): note content is sent to your chosen service.`,
         );
       })
       .catch((e) => setError(String(e)));
@@ -156,8 +155,8 @@ export function Chat({
           <article key={m.id}>
             <strong>{m.role}</strong>
             {m.revision && m.proposed_edit_id ? (
-              <div aria-label="Proposed revision">
-                <h3>Proposed revision</h3>
+              <div aria-label="Suggested changes">
+                <h3>Suggested changes</h3>
                 <div className="revision-diff">
                   <div>
                     <h4>Current</h4>
@@ -206,9 +205,7 @@ export function Chat({
             >
               Retry
             </button>
-            <button onClick={() => setShowSetup(true)}>
-              Repair local AI setup
-            </button>
+            <button onClick={() => setShowSetup(true)}>Run setup again</button>
             <button onClick={onSettings}>Open Settings</button>
           </div>
         )}
@@ -240,9 +237,11 @@ export function Chat({
               checked={revision}
               onChange={(e) => setRevision(e.target.checked)}
             />
-            Propose a notes revision
+            Let TalkKeeper edit my notes (you approve changes first)
           </label>
-          <button disabled={busy || locked || !question.trim() || !segments.length}>
+          <button
+            disabled={busy || locked || !question.trim() || !segments.length}
+          >
             Send
           </button>
         </form>
@@ -255,7 +254,7 @@ export function Chat({
               Undo
             </button>
             <details>
-              <summary>Version history</summary>
+              <summary>Earlier versions</summary>
               {versions.map((v) => (
                 <div key={v.id}>
                   <time>{v.created_at}</time>
@@ -271,29 +270,6 @@ export function Chat({
             </details>
           </>
         )}
-      </section>
-      <section aria-label="Redo enhanced notes">
-        <h2>Redo enhanced notes</h2>
-        <label>
-          Extra instructions
-          <input
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-          />
-        </label>
-        <button
-          disabled={busy || locked || !segments.length}
-          onClick={() =>
-            void ask(
-              instructions ||
-                "Redo the notes using the selected source material",
-              true,
-              true,
-            )
-          }
-        >
-          Redo notes
-        </button>
       </section>
     </>
   );

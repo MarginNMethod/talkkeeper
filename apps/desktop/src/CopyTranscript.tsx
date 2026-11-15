@@ -54,14 +54,12 @@ export function CopyTranscript({
       <details>
         <summary>Copy options</summary>
         <label>
-          <select
-            aria-label="Transcript format"
-            value={timestamps ? "timestamps" : "text"}
-            onChange={(e) => setTimestamps(e.target.value === "timestamps")}
-          >
-            <option value="timestamps">With timestamps</option>
-            <option value="text">Text only</option>
-          </select>
+          <input
+            type="checkbox"
+            checked={timestamps}
+            onChange={(e) => setTimestamps(e.target.checked)}
+          />
+          Include times
         </label>
         <label>
           <input

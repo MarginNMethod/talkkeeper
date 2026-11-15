@@ -101,19 +101,19 @@ export function SnapshotControls({
     }
   }
   return (
-    <section aria-label="Screen capture controls" className="snapshot-controls">
+    <section aria-label="Screen pictures controls" className="snapshot-controls">
       {!enabled ? (
         <button
           disabled={status !== "recording" || !noteId}
           onClick={() => void pick().catch(onError)}
         >
-          Capture shared screen
+          Take pictures of my screen
         </button>
       ) : (
         <>
           <span role="status">
-            Screen snapshots {status === "paused" ? "paused" : "on"} · {count}{" "}
-            snapshots
+            {status === "paused" ? "Screen pictures paused" : "Taking screen pictures"} · {count}{" "}
+
           </span>
           <button
             onClick={() =>
@@ -122,18 +122,18 @@ export function SnapshotControls({
                 .catch(onError)
             }
           >
-            Stop snapshots
+            Turn off
           </button>
         </>
       )}
       {picking && (
-        <div role="dialog" aria-label="Choose screen source">
+        <div role="dialog" aria-label="Which window or screen?">
           <p>
             Snapshots can contain private messages, documents, and other
             people's information. Choose one window where possible and obtain
             permission from participants. TalkKeeper windows are excluded.
             Images stay on this device unless you separately confirm sending
-            them to a cloud AI provider.
+            them to an online AI service.
           </p>
           <label>
             Screen source
@@ -142,7 +142,7 @@ export function SnapshotControls({
               value={source}
               onChange={(e) => setSource(e.target.value)}
             >
-              <option value="">Frontmost window on main display</option>
+              <option value="">The window in front</option>
               {sources.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -165,7 +165,7 @@ export function SnapshotControls({
                     });
               }}
             />
-            I understand and agree to capture this source
+            I understand and agree to take pictures of this source
           </label>
           <p>
             Every 10 seconds, changed images only. Up to 60 JPEGs per note, 1
@@ -175,9 +175,9 @@ export function SnapshotControls({
             disabled={!confirmed || busy || !sources.length}
             onClick={() => void enable()}
           >
-            Start snapshots
+            Start taking pictures
           </button>
-          <button onClick={() => setPicking(false)}>Cancel snapshots</button>
+          <button onClick={() => setPicking(false)}>Cancel pictures</button>
         </div>
       )}
     </section>
@@ -211,7 +211,7 @@ function SnapshotImage({
         <img
           className="snapshot-thumbnail"
           src={src}
-          alt={`Screen snapshot at ${time(snapshot.elapsed_ms)}`}
+          alt={`Screen picture at ${time(snapshot.elapsed_ms)}`}
         />
       )}
       {error && <p role="alert">{error}</p>}
@@ -265,19 +265,19 @@ export function SnapshotGallery({
   }
   if (!snapshots.length) return null;
   return (
-    <section aria-label="Screen snapshots">
-      <h2>Screen snapshots</h2>
+    <section aria-label="Screen pictures">
+      <h2>Screen pictures</h2>
       {(!ai || !ai.supports_images) && (
         <p>
-          Your current AI model can't read images; snapshots are saved but not
+          Your current AI model can't read images; pictures are saved but not
           used.
         </p>
       )}
       {ai?.cloud && !ai.confirmed && (
         <>
           <p>
-            Images are saved locally. To use them in AI notes, confirm sending
-            them to your selected provider and endpoint.
+            Pictures are saved on this computer. To use them in AI notes, confirm sending
+            them to your selected online service.
           </p>
           <button onClick={() => setWarning(true)}>
             Review cloud image sharing
@@ -287,11 +287,11 @@ export function SnapshotGallery({
       {warning && (
         <div role="dialog" aria-label="Cloud image sharing">
           <p>
-            Your selected cloud provider (
-            {ai?.destination ?? "current endpoint"}) will receive included
+            Your selected online service (
+            {ai?.destination ?? "current service"}) will receive included
             screen images when you generate AI notes. They may contain other
             people's private information. This approval applies to the current
-            provider and endpoint.
+            online service.
           </p>
           <button
             onClick={() =>
@@ -303,18 +303,18 @@ export function SnapshotGallery({
                 .catch(onError)
             }
           >
-            Allow images for this provider
+            Allow images for this service
           </button>
-          <button onClick={() => setWarning(false)}>Keep images local</button>
+          <button onClick={() => setWarning(false)}>Keep images on this computer</button>
         </div>
       )}
       <button
         onClick={() => {
-          if (window.confirm("Delete all screen snapshots from this note?"))
+          if (window.confirm("Delete all screen pictures from this note?"))
             void mutate("snapshot_delete_all").catch(onError);
         }}
       >
-        Delete all snapshots
+        Delete all pictures
       </button>
       <div className="snapshot-gallery">
         {snapshots.map((s) => (
@@ -337,10 +337,10 @@ export function SnapshotGallery({
               Don't use this in the summary
             </label>
             <button
-              aria-label={`Delete snapshot at ${time(s.elapsed_ms)}`}
+              aria-label={`Delete picture at ${time(s.elapsed_ms)}`}
               onClick={() => void mutate("snapshot_delete", s).catch(onError)}
             >
-              Delete snapshot
+              Delete picture
             </button>
           </figure>
         ))}

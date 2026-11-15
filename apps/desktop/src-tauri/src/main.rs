@@ -38,7 +38,7 @@ fn err(e: impl std::fmt::Display) -> String {
 struct AppState {
     store: Arc<Mutex<Store>>,
     directory: PathBuf,
-    capture: Mutex<Option<tokio::sync::mpsc::Sender<String>>>,
+    capture: Mutex<Option<session::ActiveCapture>>,
     clipboard: Mutex<Option<arboard::Clipboard>>,
     snapshots: Mutex<snapshots::SnapshotSession>,
 }
@@ -278,17 +278,13 @@ async fn download_model(
         .find(|m| m.name == name)
         .ok_or("Unknown model")?;
 
-    talkkeeper_transcribe::models::ModelManager::new(&state.directory)
-        .download(model, move |downloaded, total| {
-            let _ = app.emit(
-                "model://progress",
-                json!({
-                "downloaded":downloaded,"total":total}
-                ),
-            );
-        })
-        .await
-        .map_err(err)?;
+    let manager = talkkeeper_transcribe::models::ModelManager::new(&state.directory);
+    tokio::select! {
+        result = manager.download(model, move |downloaded, total| {
+            let _ = app.emit("model://progress", json!({"downloaded":downloaded,"total":total}));
+        }) => { result.map_err(err)?; }
+        _ = session::DOWNLOAD_CANCEL.notified() => { return Err("Download cancelled".into()); }
+    }
 
     Ok(())
 }
@@ -319,7 +315,7 @@ fn copy_text(state: &AppState, text: String) -> Result<()> {
 }
 
 fn preferences(store: &Store) -> Result<Value> {
-    let mut defaults = json!({"provider":"Automatic","base_url":"http://localhost:11434","language":"auto","stt_engine":"local","snapshots_preference":"Ask each time","snapshot_retention":30,"retention":30,"vocabulary":[],"notice":"I would like to record and transcribe this conversation for my notes. Does everyone consent?"});
+    let mut defaults = json!({"provider":"Automatic","base_url":"http://localhost:11434","language":"auto","stt_engine":"local","snapshots_preference":"Ask each time","snapshot_retention":0,"retention":0,"vocabulary":[],"notice":"I would like to record and transcribe this conversation for my notes. Does everyone consent?"});
     if let Some(saved) = store.get_setting("preferences").map_err(err)? {
         if let Some(values) = saved.as_object() {
             defaults.as_object_mut().unwrap().extend(values.clone());
@@ -354,7 +350,10 @@ fn validate_settings(payload: &Value) -> Result<()> {
             "snapshots_preference"
                 if ["Ask each time", "Always on", "Never"]
                     .contains(&value.as_str().unwrap_or("")) => {}
-            "calendar_details" | "calendar_reminders" | "calendar_auto_capture"
+            "recording_consent_confirmed"
+            | "calendar_details"
+            | "calendar_reminders"
+            | "calendar_auto_capture"
                 if value.is_boolean() => {}
             "snapshot_retention" if value.as_u64().is_some_and(|n| n <= 36500) => {}
             "retention" if value.as_u64().is_some_and(|n| n <= 36500) => {}
@@ -365,7 +364,7 @@ fn validate_settings(payload: &Value) -> Result<()> {
                             .all(|v| v.as_str().is_some_and(|s| !s.trim().is_empty()))
                 }) => {}
             "calendar_email" | "base_url" | "stt_url" | "model" | "stt_model" | "language"
-            | "notice"
+            | "notice" | "meeting_microphone"
                 if value.is_string() => {}
             _ => return Err(format!("Invalid or unknown setting: {key}")),
         }
@@ -494,6 +493,28 @@ fn data_inner(state: &AppState, action: String, payload: Value) -> Result<Value>
             store.delete_folder(id()?).map_err(err)?;
             Ok(Value::Null)
         }
+        "recorded_duration" => Ok(store
+            .get_setting(&format!("recorded_duration.{}", id()?))
+            .map_err(err)?
+            .unwrap_or(json!(0))),
+        "transcript_expiry" => {
+            let days = preferences(&store)?["retention"].as_u64().unwrap_or(0);
+            let lines = store.list_transcript_segments(id()?).map_err(err)?;
+            let deleted = store
+                .get_setting(&format!("transcript_deleted.{}", id()?))
+                .map_err(err)?;
+            let expires = if days > 0 {
+                lines
+                    .iter()
+                    .map(|s| s.created_at + chrono::Duration::days(days.min(36500) as i64))
+                    .min()
+            } else {
+                None
+            };
+            Ok(
+                json!({"deleted_after":if lines.is_empty() {deleted} else {None},"expires":expires.filter(|date| *date <= chrono::Utc::now() + chrono::Duration::days(7))}),
+            )
+        }
         "settings" => preferences(&store),
         "save_settings" => {
             validate_settings(&payload)?;
@@ -599,12 +620,12 @@ fn main() {
 
             let days = preferences(&store).map_err(std::io::Error::other)?["retention"]
                 .as_u64()
-                .unwrap_or(30);
+                .unwrap_or(0);
             store.apply_transcript_retention(days.min(36500) as u32)?;
             let snapshot_days = preferences(&store).map_err(std::io::Error::other)?
                 ["snapshot_retention"]
                 .as_u64()
-                .unwrap_or(30);
+                .unwrap_or(0);
             store.apply_snapshot_retention(snapshot_days.min(36500) as u32)?;
 
             app.manage(AppState {
@@ -633,6 +654,12 @@ fn main() {
             setup::setup_plan,
             setup::setup_run,
             setup::setup_cancel,
+            setup::setup_progress,
+            setup::setup_mic_checked,
+            setup::setup_test_provider,
+            setup::setup_check_microphone,
+            setup::setup_preference,
+            setup::setup_remove_ai_download,
             people::recent_topics,
             start_note,
             enhance_note,
@@ -641,6 +668,12 @@ fn main() {
             download_model,
             snapshots::snapshot_control,
             snapshots::snapshot_ai_status,
+            session::capture_status,
+            session::list_input_devices,
+            session::recording_preferences,
+            session::cancel_model_download,
+            session::capture_capabilities,
+            session::open_microphone_settings,
             session::start_capture,
             session::pause_capture,
             session::resume_capture,

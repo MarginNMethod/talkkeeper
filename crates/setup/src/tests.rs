@@ -85,6 +85,14 @@ async fn archive_to_running_engine_to_speech_and_idempotent_retry() {
         )
         .await
         .unwrap();
+    let order = stages.lock().unwrap().clone();
+    assert!(
+        order.iter().position(|s| *s == Stage::SpeechReady).unwrap()
+            < order
+                .iter()
+                .position(|s| *s == Stage::DownloadRuntime)
+                .unwrap()
+    );
     assert!(stages.lock().unwrap().contains(&Stage::Verify));
     assert!(stages.lock().unwrap().contains(&Stage::DownloadSpeechModel));
     let base = runtime.base_url.clone();
@@ -148,10 +156,19 @@ async fn blocked_download_reports_fix_and_can_retry() {
     setup.test_source.as_mut().unwrap().url = format!("{}/blocked", server.uri());
     let mut plan = setup.plan().unwrap();
     plan.total_download_bytes = 100;
+    let token = CancellationToken::new();
     let result = setup
-        .run_setup(&plan, |_| {}, CancellationToken::new())
+        .run_setup(
+            &plan,
+            |p| {
+                if p.message.starts_with("Waiting for") {
+                    token.cancel();
+                }
+            },
+            token.clone(),
+        )
         .await;
-    assert!(matches!(result, Err(Error::Offline)));
+    assert!(matches!(result, Err(Error::Cancelled)));
     // The offline attempt leaves no partial runtime, so the same entrypoint retries.
     assert!(!setup.directory.join("ollama/runtime").exists());
     setup.test_source.as_mut().unwrap().url = format!("{}/engine.tgz", server.uri());
@@ -170,9 +187,145 @@ fn bundled_speech_tiers_are_multilingual() {
         assert!(!tier.whisper.model.ends_with(".en"));
         let expected = match tier.min_ram_gb {
             0 => "tiny",
-            8 => "small",
-            _ => "large-v3-turbo",
+            8 => "base",
+            _ => "small",
         };
         assert_eq!(tier.whisper.model, expected);
     }
+}
+
+#[tokio::test]
+async fn verified_speech_ready_precedes_a_later_ai_verification_failure() {
+    let external = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/version"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"version":"stub"})))
+        .mount(&external)
+        .await;
+    let (_dir, setup, _server) = fixture(Some(external.uri())).await;
+    let mut plan = setup.plan().unwrap();
+    plan.total_download_bytes = 100;
+    Mock::given(method("GET"))
+        .and(path("/api/tags"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"models":[{"name":plan.llm.ollama_tag}]})),
+        )
+        .mount(&external)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/api/chat"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&external)
+        .await;
+    let speech_ready = std::sync::atomic::AtomicBool::new(false);
+    let result = setup
+        .run_setup(
+            &plan,
+            |progress| {
+                if progress.stage == Stage::Verify && progress.completed == 0 {
+                    assert!(setup.directory.join("models/speech.bin").exists());
+                    speech_ready.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            },
+            CancellationToken::new(),
+        )
+        .await;
+    assert!(matches!(result, Err(Error::Verify)));
+    assert!(speech_ready.load(std::sync::atomic::Ordering::Relaxed));
+}
+
+#[tokio::test]
+async fn transient_network_failure_retries_without_another_click() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let external = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/version"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"version":"stub"})))
+        .mount(&external)
+        .await;
+    let (_dir, setup, server) = fixture(Some(external.uri())).await;
+    server.reset().await;
+    let attempts = Arc::new(AtomicUsize::new(0));
+    let seen = attempts.clone();
+    Mock::given(method("GET"))
+        .and(path("/speech"))
+        .respond_with(move |_: &wiremock::Request| {
+            if seen.fetch_add(1, Ordering::SeqCst) == 0 {
+                ResponseTemplate::new(503)
+            } else {
+                ResponseTemplate::new(200).set_body_bytes(b"abc".to_vec())
+            }
+        })
+        .expect(2)
+        .mount(&server)
+        .await;
+    let mut plan = setup.plan().unwrap();
+    plan.total_download_bytes = 100;
+    Mock::given(method("GET"))
+        .and(path("/api/tags"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"models":[{"name":plan.llm.ollama_tag}]})),
+        )
+        .mount(&external)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/api/chat"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"message":{"content":"Ready"}})),
+        )
+        .mount(&external)
+        .await;
+    let waiting = std::sync::atomic::AtomicBool::new(false);
+    let runtime = setup
+        .run_setup(
+            &plan,
+            |p| {
+                if p.message.starts_with("Waiting for the internet") {
+                    waiting.store(true, Ordering::SeqCst);
+                }
+            },
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(waiting.load(Ordering::SeqCst));
+    assert_eq!(attempts.load(Ordering::SeqCst), 2);
+    drop(runtime);
+}
+
+#[tokio::test]
+async fn speech_partial_survives_restart_and_is_verified_before_unlock() {
+    use wiremock::matchers::header;
+    let (_dir, setup, server) = fixture(None).await;
+    server.reset().await;
+    std::fs::create_dir_all(setup.directory.join("models")).unwrap();
+    std::fs::write(setup.directory.join("models/speech.download"), b"a").unwrap();
+    Mock::given(method("GET"))
+        .and(path("/speech"))
+        .and(header("Range", "bytes=1-"))
+        .respond_with(ResponseTemplate::new(206).set_body_bytes(b"bc".to_vec()))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let plan = setup.plan().unwrap();
+    let ready = std::sync::atomic::AtomicBool::new(false);
+    setup
+        .download_speech(&plan, &|p| {
+            if p.stage == Stage::SpeechReady {
+                assert_eq!(
+                    std::fs::read(setup.directory.join("models/speech.bin")).unwrap(),
+                    b"abc"
+                );
+                ready.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+        })
+        .await
+        .unwrap();
+    assert!(ready.load(std::sync::atomic::Ordering::SeqCst));
+    assert!(!setup.directory.join("models/speech.download").exists());
 }

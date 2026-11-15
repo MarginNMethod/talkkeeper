@@ -75,13 +75,13 @@ test("recipe editor saves text and variables", () => {
       onCancel={() => {}}
     />,
   );
-  fireEvent.change(screen.getByLabelText("Recipe name"), {
+  fireEvent.change(screen.getByLabelText("Saved question name"), {
     target: { value: "Follow up" },
   });
   fireEvent.change(screen.getByLabelText("Prompt"), {
     target: { value: "Use {{notes}}" },
   });
-  fireEvent.click(screen.getByText("Save recipe"));
+  fireEvent.click(screen.getByText("Save question"));
   expect(save.mock.calls[0][0].prompt).toBe("Use {{notes}}");
 });
 test("scope picker, import and export", async () => {
@@ -120,20 +120,20 @@ test("scope picker, import and export", async () => {
     />,
   );
   await waitFor(() => expect(screen.getByText("Status")).toBeTruthy());
-  fireEvent.change(screen.getByLabelText("Choose scope"), {
+  fireEvent.change(screen.getByLabelText("Which notes?"), {
     target: { value: "selected" },
   });
-  expect(screen.getByLabelText("Scope chips").textContent).toContain(
+  expect(screen.getByLabelText("Notes included").textContent).toContain(
     "selected",
   );
-  fireEvent.change(screen.getByLabelText("Recipe"), { target: { value: "r" } });
-  fireEvent.click(screen.getByText("Export recipe"));
+  fireEvent.change(screen.getByLabelText("Saved question"), { target: { value: "r" } });
+  fireEvent.click(screen.getByText("Export question"));
   expect(create).toHaveBeenCalled();
   expect(revoke).toHaveBeenCalledWith("blob:recipe");
   const file = new File([JSON.stringify(recipe)], "recipe.json", {
     type: "application/json",
   });
-  fireEvent.change(screen.getByLabelText("Import recipe"), {
+  fireEvent.change(screen.getByLabelText("Import question"), {
     target: { files: [file] },
   });
   await waitFor(() =>

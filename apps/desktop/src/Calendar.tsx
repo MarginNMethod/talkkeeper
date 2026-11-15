@@ -82,19 +82,19 @@ export function CalendarSettings({
         />
       </label>
       <p>
-        Set this to hide invitations you declined. Save settings, then refresh
+        Set this to hide invitations you declined. Save changes, then refresh
         your calendars.
       </p>
       <p>
         Anyone with a private calendar link can read it. Keep it private. Links
-        are saved in your operating system keychain.
+        are saved in your computer’s password manager.
       </p>
       <details>
         <summary>Find your calendar link</summary>
         <p>
           Google Calendar: open calendar settings, then Integrate calendar, and
-          copy the secret address in iCal format. Outlook: open Calendar
-          settings and publish the calendar to get its ICS link. Apple Calendar:
+          copy the private calendar link. Outlook: open Calendar
+          settings and publish the calendar to get its private calendar link. Apple Calendar:
           use the shared calendar link. Publishing may make your calendar
           readable by anyone with the link.
         </p>
@@ -132,7 +132,7 @@ export function CalendarSettings({
         Add calendar
       </button>
       <button disabled={busy} onClick={() => void run("import")}>
-        Import .ics file
+        Choose a calendar file instead…
       </button>
       <p role="status">{message}</p>
       {sources.map((s) => (
@@ -223,12 +223,12 @@ export function CalendarSettings({
           checked={prefs.calendar_auto_capture ?? false}
           onChange={(e) => onChange("calendar_auto_capture", e.target.checked)}
         />
-        Start capture automatically when a meeting begins
+        Start recording automatically when a meeting begins
       </label>
       <p>
         Only enable this if you have arranged consent from participants. While
         TalkKeeper is open, an enabled calendar meeting can start microphone and
-        system audio capture. The capture indicator stays visible. Leave this
+        system audio recording. The recording indicator stays visible. Leave this
         off to start every recording yourself.
       </p>
       <label>
@@ -237,13 +237,13 @@ export function CalendarSettings({
           checked={prefs.calendar_details ?? false}
           onChange={(e) => onChange("calendar_details", e.target.checked)}
         />
-        Use calendar details when writing notes
+        Use meeting details when writing summaries
       </label>
       <p>
         When enabled, title, time and attendee names are included in AI
         enhancement.
         {!["Automatic", "Ollama"].includes(prefs.provider ?? "Automatic") &&
-          " Your cloud provider will receive these details."}
+          " Your online service will receive these details."}
       </p>
     </section>
   );
@@ -279,8 +279,8 @@ export function Agenda({
     groups.set(day, [...(groups.get(day) ?? []), entry]);
   }
   return (
-    <section aria-label="Today & upcoming">
-      <h2>Today & upcoming</h2>
+    <section aria-label="Today">
+      <h2>Today</h2>
       {!groups.size && <p>No upcoming meetings. Add a calendar in Settings.</p>}
       {[...groups].map(([day, events]) => (
         <section key={day}>
@@ -433,13 +433,15 @@ export function CalendarAutoCapture({
   active,
   onOpen,
   onError,
+  onRecord,
 }: {
   active: boolean;
+  onRecord: (id: string) => Promise<void>;
   onOpen: (n: Note) => Promise<void>;
   onError: (e: unknown) => void;
 }) {
-  const latest = useRef({ active, onOpen, onError });
-  latest.current = { active, onOpen, onError };
+  const latest = useRef({ active, onOpen, onError, onRecord });
+  latest.current = { active, onOpen, onError, onRecord };
   useEffect(() => {
     const seen = new Set<string>();
     let busy = false;
@@ -462,7 +464,7 @@ export function CalendarAutoCapture({
         seen.add(`${e.source_id}/${e.uid}/${e.instance_start}`);
         const note = await data<Note>("calendar_start", { event: e });
         await latest.current.onOpen(note);
-        await invoke("start_capture", { noteId: note.id });
+        await latest.current.onRecord(note.id);
       } catch (e) {
         latest.current.onError(e);
       } finally {

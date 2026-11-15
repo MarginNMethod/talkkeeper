@@ -68,7 +68,7 @@ test("attendee suggestions preserve known email and open the person", async () =
   );
   fireEvent.click(screen.getByRole("button", { name: "Open Ada" }));
   expect(open).toHaveBeenCalledWith("a");
-  fireEvent.change(screen.getByLabelText("Attendees"), {
+  fireEvent.change(screen.getByLabelText("Who was there"), {
     target: { value: "Ada <ada@example.org>, New <new@team.org>" },
   });
   expect(change).toHaveBeenCalledWith([
@@ -130,7 +130,7 @@ test("person page lists meetings, starts notes and confirms merge", async () => 
 test("attendee typing preserves partial email text", () => {
   backend();
   render(<Attendees value={[]} onChange={() => {}} onOpen={() => {}} />);
-  const input = screen.getByLabelText("Attendees") as HTMLInputElement;
+  const input = screen.getByLabelText("Who was there") as HTMLInputElement;
   for (const text of [
     "Ada <a",
     "Ada <a@",

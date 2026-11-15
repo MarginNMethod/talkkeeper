@@ -163,6 +163,9 @@ impl Store {
         Ok(())
     }
     pub fn apply_snapshot_retention(&mut self, days: u32) -> Result<usize> {
+        if days == 0 {
+            return Ok(0);
+        }
         let cutoff = (Utc::now() - Duration::days(i64::from(days))).to_rfc3339();
         let count = self
             .conn

@@ -120,6 +120,7 @@ pub struct CaptureHandle {
 impl Capture {
     /// Starts both requested backends before returning; never requests consent implicitly.
     pub fn start(config: CaptureConfig) -> Result<CaptureHandle> {
+        authorize_microphone()?;
         Self::start_inner(config, true)
     }
     /// Capture only system audio (also useful on machines without a microphone).
@@ -328,7 +329,7 @@ pub fn permissions_status() -> PermissionsStatus {
         microphone: if cfg!(target_os = "macos") { "Enable Microphone in System Settings > Privacy & Security; the app needs NSMicrophoneUsageDescription." }
             else if cfg!(target_os = "windows") { "Enable microphone access for desktop apps in Windows Privacy settings." }
             else { "Allow microphone access in your audio server and sandbox settings." }.into(),
-        system: if cfg!(all(target_os = "macos", not(feature = "macos-screencapture"))) { "System audio is not included in this macOS build (it needs Xcode 26 or newer to compile). Microphone capture still works. See the README to enable it." }
+        system: if cfg!(all(target_os = "macos", not(feature = "macos-screencapture"))) { "This build records your microphone only. Other people are picked up only if your microphone can hear them." }
             else if cfg!(target_os = "macos") { "macOS 14+: enable Screen Recording in System Settings > Privacy & Security, then restart the app." }
             else if cfg!(target_os = "windows") { "WASAPI loopback captures the default render endpoint; no separate permission prompt is available." }
             else { "A running PulseAudio or PipeWire-pulse server with a default sink monitor is required." }.into(),
@@ -337,6 +338,36 @@ pub fn permissions_status() -> PermissionsStatus {
 /// Permission prompts are managed by the OS when capture opens; this call does not start recording.
 pub fn request_permissions() -> PermissionsStatus {
     permissions_status()
+}
+
+/// Explicit consent before opening the microphone. This must run off the UI thread.
+pub fn authorize_microphone() -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_av_foundation::{AVAuthorizationStatus, AVCaptureDevice, AVMediaTypeAudio};
+        // AVMediaTypeAudio is a framework-owned constant. The copied block owns
+        // its sender and remains valid until AVFoundation calls it.
+        let allowed = unsafe {
+            let media =
+                AVMediaTypeAudio.ok_or_else(|| backend("Audio authorization unavailable"))?;
+            match AVCaptureDevice::authorizationStatusForMediaType(media) {
+                AVAuthorizationStatus::Authorized => true,
+                AVAuthorizationStatus::NotDetermined => {
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    let callback = block2::RcBlock::new(move |granted: objc2::runtime::Bool| {
+                        let _ = tx.send(granted.as_bool());
+                    });
+                    AVCaptureDevice::requestAccessForMediaType_completionHandler(media, &callback);
+                    rx.recv().unwrap_or(false)
+                }
+                _ => false,
+            }
+        };
+        if !allowed {
+            return Err(backend("TalkKeeper can't use the microphone. Allow it in System Settings > Privacy & Security > Microphone, then try again."));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
