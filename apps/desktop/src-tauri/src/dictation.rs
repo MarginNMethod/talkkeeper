@@ -375,6 +375,10 @@ async fn run(
     })
     .await
     .map_err(|_| "Dictation indicator could not open".to_owned())?;
+    tokio::task::spawn_blocking(talkkeeper_audio::authorize_microphone)
+        .await
+        .map_err(err)?
+        .map_err(err)?;
     let engine = session::speech_engine(&state, &prefs).await?;
     let mut stt = session::begin_transcription(engine.as_ref(), &prefs).await?;
     let mut events = stt.events().ok_or("STT events unavailable")?;
@@ -418,6 +422,7 @@ async fn run(
         json!({"state":"listening","cues":config["cues"]}),
     )
     .map_err(err)?;
+    let mut resampler = talkkeeper_transcribe::StreamingResampler::default();
     let cancelled = loop {
         if !app
             .get_webview_window("dictation")
@@ -433,7 +438,7 @@ async fn run(
                 let frame=frame.ok_or("Microphone stopped")?;
                 let level=talkkeeper_audio::rms_dbfs(&frame.samples);
                 app.emit("dictation://level",json!(if level.is_finite(){level}else{-100.})).map_err(err)?;
-                stt.push(AudioChunk{channel:Channel::Mic,sample_rate:16000,samples:talkkeeper_transcribe::resample(&frame.samples,frame.sample_rate).map_err(err)?,start_ms:frame.timestamp_ms}).await.map_err(err)?;
+                stt.enqueue(AudioChunk{channel:Channel::Mic,sample_rate:16000,samples:resampler.push(&frame.samples,frame.sample_rate).map_err(err)?,start_ms:frame.timestamp_ms}).map_err(err)?;
             }
         }
     };

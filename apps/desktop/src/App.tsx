@@ -19,6 +19,7 @@ import { WorkspaceChat } from "./WorkspaceChat";
 import { Chat } from "./Chat";
 import { CopyTranscript } from "./CopyTranscript";
 import { SnapshotControls, SnapshotGallery } from "./Snapshots";
+import { CaptureFeedback, MicrophoneSettingsButton } from "./CaptureFeedback";
 import { Summary } from "./Summary";
 export function App() {
   const [notes, setNotes] = useState<Note[]>([]),
@@ -32,6 +33,9 @@ export function App() {
     [settings, setSettings] = useState<Preferences | null>(null),
     [error, setError] = useState(""),
     [status, setStatus] = useState("stopped"),
+    [starting, setStarting] = useState(false),
+    [systemAudio, setSystemAudio] = useState(true),
+    [warning, setWarning] = useState<{note_id:string; kind:string; active:boolean} | null>(null),
     [captureNote, setCaptureNote] = useState<string | null>(null),
     [levels, setLevels] = useState<Record<string, number>>({}),
     [notice, setNotice] = useState(""),
@@ -43,6 +47,8 @@ export function App() {
   const [directory, setDirectory] = useState<"people" | "companies" | null>(
     null,
   );
+  const startPending = useRef(false);
+  useEffect(() => { void invoke<{system_audio:boolean}>("capture_capabilities").then(c => setSystemAudio(c.system_audio)).catch(fail); }, []);
   const [agenda, setAgenda] = useState(false);
   const [personId, setPersonId] = useState<string | undefined>();
   const [workspaceChat, setWorkspaceChat] = useState(false);
@@ -106,6 +112,7 @@ export function App() {
         "capture://state",
         (e) => {
           setStatus(e.payload.state);
+          if (e.payload.state === "stopped") setWarning(null);
           setCaptureNote(
             e.payload.state === "stopped" ? null : e.payload.note_id,
           );
@@ -115,6 +122,7 @@ export function App() {
       listen<{ source: string; level: number }>("capture://level", (e) =>
         setLevels((l) => ({ ...l, [e.payload.source]: e.payload.level })),
       ),
+      listen<{note_id:string; kind:string; active:boolean}>("capture://warning", e => setWarning(e.payload)),
       listen<string>("setup://error", (e) => fail(e.payload)),
       listen("capture://auto-stop-suggested", () => setAutoStop(true)),
       listen<{ downloaded: number; total: number }>("model://progress", (e) =>
@@ -204,9 +212,16 @@ export function App() {
     await data("export", { id: note?.id, format, copy, save: !copy });
   }
   async function capture(command: string) {
-    await flush();
-    await invoke(command, { noteId: note?.id });
-    if (command === "start_capture") setNotice(await data<string>("notice"));
+    const start = command === "start_capture";
+    if (start && startPending.current) return;
+    if (start) { startPending.current = true; setStarting(true); setError(""); setWarning(null); setLevels({}); }
+    try {
+      await flush();
+      await invoke(command, { noteId: note?.id });
+      if (start) setNotice(await data<string>("notice"));
+    } finally {
+      if (start) { startPending.current = false; setStarting(false); }
+    }
   }
   async function mutate(action: string) {
     if (!note) return;
@@ -365,6 +380,7 @@ export function App() {
         {error && (
           <div role="alert">
             {error}
+            {error.toLowerCase().includes("microphone") && <MicrophoneSettingsButton onError={fail} />}
             <button onClick={() => setError("")}>Dismiss</button>
           </div>
         )}
@@ -500,7 +516,7 @@ export function App() {
               )}
             </header>
             <Attendees
-              key={note.id}
+              key={`attendees-${note.id}`}
               value={note.attendees}
               onChange={(attendees) => update({ attendees })}
               onOpen={(id) =>
@@ -537,11 +553,12 @@ export function App() {
             </label>
             <div className="capture">
               <p>Obtain participant consent before recording.</p>
+              <CaptureFeedback systemAudio={systemAudio} warning={warning?.note_id === note.id && warning.active ? warning.kind : null} onError={fail} />
               <button
-                disabled={status !== "stopped" || trash}
+                disabled={starting || status !== "stopped" || trash}
                 onClick={() => void capture("start_capture").catch(fail)}
               >
-                Start capture
+                {starting ? "Starting…" : "Start capture"}
               </button>
               <button
                 disabled={status !== "recording"}
@@ -592,7 +609,7 @@ export function App() {
                 </div>
               )}
             </div>
-            <SnapshotGallery key={note.id} noteId={note.id} onError={fail} onSeek={(ms) => {
+            <SnapshotGallery key={`snapshots-${note.id}`} noteId={note.id} onError={fail} onSeek={(ms) => {
               const segment = [...segments].reverse().find((s) => s.start_ms <= ms) ?? segments[0];
               if (segment) document.getElementById(`segment-${segment.seq}`)?.scrollIntoView?.({ behavior: "smooth" });
             }} />

@@ -173,7 +173,8 @@ impl SttEngine for Deepgram {
                 .map_err(|_| Error::Provider("stream connection failed".into()))?;
             connections.push((channel, socket));
         }
-        let (input, mut rx) = mpsc::channel(8);
+        let input = Arc::new(Input::default());
+        let rx = input.clone();
         let (tx, output) = mpsc::channel(8);
         let worker = tokio::spawn(async move {
             // Child tasks are owned by JoinSet and aborted when the session is dropped.
@@ -265,7 +266,7 @@ impl SttEngine for Deepgram {
             while tasks.join_next().await.is_some() {}
         });
         Ok(SttSession {
-            input: tokio::sync::Mutex::new(Some(input)),
+            input,
             output: Some(Box::pin(ReceiverStream::new(output))),
             worker,
         })
