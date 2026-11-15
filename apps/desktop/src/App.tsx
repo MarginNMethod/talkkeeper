@@ -14,6 +14,8 @@ import { Transcript } from "./Transcript";
 import { Settings } from "./Settings";
 import { Templates } from "./Templates";
 import { Setup } from "./Setup";
+import { SetupCard } from "./SetupCard";
+import { useSetup } from "./useSetup";
 import { People, Attendees, type Person } from "./People";
 import { WorkspaceChat } from "./WorkspaceChat";
 import { Chat } from "./Chat";
@@ -55,7 +57,8 @@ export function App() {
     [folders, setFolders] = useState<{ id: string; name: string }[]>([]),
     [folder, setFolder] = useState(""),
     [download, setDownload] = useState<{percent:number;done:string;total:string;time:string} | null>(null),
-    [downloadReady, setDownloadReady] = useState(false);
+    [downloadReady, setDownloadReady] = useState(false),
+    [progress, setProgress] = useState("");
   const [directory, setDirectory] = useState<"people" | "companies" | null>(
     null,
   );
@@ -86,12 +89,21 @@ export function App() {
   const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
   const [citationSeq, setCitationSeq] = useState<number | null>(null);
   useEffect(() => { if (citationSeq !== null && !workspaceChat) { const target = document.getElementById(`segment-${citationSeq}`); if (target) { target.scrollIntoView?.({ behavior: "smooth" }); setCitationSeq(null); } } }, [segments, workspaceChat, citationSeq]);
-  const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null);
-  useEffect(() => {
-    void invoke<{ completed: boolean; custom: boolean }>("setup_status")
-      .then((s) => setSetupNeeded(!s.completed && !s.custom))
-      .catch(fail);
-  }, []);
+  const setup = useSetup();
+  const [setupChoice, setSetupChoice] = useState(false);
+  const [firstRunNote,setFirstRunNote] = useState<string | null>(null);
+  useEffect(()=>{
+    if(!firstRunNote || note?.id !== firstRunNote) return;
+    const focus = () => {
+      const editor = document.querySelector<HTMLElement>('[aria-label="Rough notes"]');
+      if(editor) { editor.focus(); observer.disconnect(); }
+    };
+    const observer = new MutationObserver(focus);
+    observer.observe(document.body,{childList:true,subtree:true});
+    const frame = requestAnimationFrame(focus);
+    return ()=>{observer.disconnect();cancelAnimationFrame(frame);};
+  },[firstRunNote,note?.id]);
+  const setupNeeded = !setupChoice && !setup.started && setup.status !== null && !setup.status.completed && !setup.status.custom;
   const current = useRef<Note | null>(null),
     saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     saveQueue = useRef(Promise.resolve());
@@ -167,7 +179,6 @@ export function App() {
       listen<{note_id:string; kind:string; active:boolean}>("capture://warning", e => { if (e.payload.note_id === visibleNote.current) setWarning(e.payload); }),
       listen<{note_id:string;seconds:number}>("capture://lag", e => { if (e.payload.note_id === visibleNote.current) setLag(e.payload.seconds); }),
       listen<{state:string}>("dictation://state", e => setDictating(["listening", "transcribing", "inserting"].includes(e.payload.state))),
-      listen<string>("setup://error", (e) => fail(e.payload)),
       listen<{note_id:string}>("capture://auto-stop-suggested", e => { if (e.payload.note_id === visibleNote.current) setAutoStop(true); }),
       listen<{ downloaded: number; total: number }>("model://progress", (e) => {
         if (downloadNote.current !== visibleNote.current || !downloadStart.current) return;
@@ -227,14 +238,17 @@ export function App() {
     void data<number>("recorded_duration", {id:n.id}).then(ms => { if (typeof ms === "number") setDurations(d => ({...d,[n.id]:ms})); }).catch(fail);
     void data<{deleted_after?:number;expires?:string}>("transcript_expiry", {id:n.id}).then(value => { if (current.current?.id === n.id) setExpiry(value); }).catch(fail);
   }
-  async function create() {
+  async function create(firstRun = false) {
     await flush();
     const n = await data<Note>("start_note", {});
+    if(firstRun) { n.title="Untitled meeting"; await data("update",n);setFirstRunNote(n.id); }
+    setSetupChoice(true);
     await select(n);
     await refresh();
   }
   async function enhance() {
     if (!note) return;
+    if (!setup.aiReady) { setProgress(setup.status?.ai === "skipped" ? "AI notes aren't set up on this computer." : setup.eta === "working out time left…" ? "AI notes unlock when the download finishes · working out time left…" : `AI notes will be ready in ${setup.eta.replace(/ left$/, "")}`); return; }
     await flush();
     setEnhancing(true);
     setNote((n) => (n ? { ...n, summary_markdown: "" } : n));
@@ -270,6 +284,10 @@ export function App() {
     if (start) { captureRef.current = id; captureState.current = "starting"; setCaptureNote(id); startPending.current = true; setStarting(true); setRecordError("", id); setFailedTakes(takes => { const next = {...takes}; delete next[id]; return next; }); setWarning(null); setLevels({}); setElapsed(0); setWordsAt(0); setFinishedNote(null); clock.current = {elapsed:0,at:Date.now()}; }
     if (command === "stop_capture") setStatus("finishing");
     try {
+      if (start && setup.status?.mic_checked === false) {
+        const checked = await setup.checkMicrophone();
+        if (checked !== "success") return;
+      }
       await flush();
       await invoke(command, { noteId:id });
     } catch (e) {
@@ -321,22 +339,21 @@ export function App() {
     <>
       <CalendarAutoCapture active={status !== "stopped"} onOpen={async n => { await select(n); await refresh(); }} onError={e => setRecordError(String(e))} />
       <CalendarReminder onOpen={n => void select(n).then(refresh).catch(fail)} onError={fail} />
+      {setup.quitRequested && <section role="dialog" aria-label="Setup isn't finished yet"><h2>Setup isn't finished yet</h2><p>If you quit now, the download pauses and carries on next time you open TalkKeeper.</p><button onClick={()=>setup.setQuitRequested(false)}>Keep TalkKeeper open</button><button onClick={()=>void setup.quit()}>Quit anyway</button><label><input type="checkbox" checked={setup.dontAsk} onChange={e=>setup.setDontAsk(e.target.checked)} />Don't ask again</label></section>}
     <main>
       <aside className="sidebar">
         <h1>TalkKeeper</h1>
-        <button onClick={() => void flush().then(() => { setAgenda(true); setWorkspaceChat(false); setDirectory(null); }).catch(fail)}>Today &amp; upcoming</button>
+        <button onClick={() => void flush().then(() => { setSetupChoice(true); setAgenda(true); setWorkspaceChat(false); setDirectory(null); }).catch(fail)}>Today &amp; upcoming</button>
         <button
-          disabled={setupNeeded !== false}
           onClick={() =>
             void flush()
-              .then(() => { setAgenda(false); setWorkspaceChat(true); })
+              .then(() => { setSetupChoice(true); setAgenda(false); setWorkspaceChat(true); })
               .catch(fail)
           }
         >
           Ask your notes
         </button>
         <button
-          disabled={setupNeeded !== false}
           onClick={() => void create().catch(fail)}
         >
           New note
@@ -349,6 +366,7 @@ export function App() {
         />
         <button
           onClick={() => {
+            setSetupChoice(true);
             setDirectory(null);
             setTrash(false);
             setAgenda(false);
@@ -362,6 +380,7 @@ export function App() {
             onClick={() =>
               void flush()
                 .then(() => {
+                  setSetupChoice(true);
                   setPersonId(undefined);
                   setDirectory(kind);
                   setAgenda(false);
@@ -372,7 +391,7 @@ export function App() {
             {kind === "people" ? "People" : "Companies"}
           </button>
         ))}
-        <button onClick={() => { setAgenda(false); setDirectory(null); setTrash(true); }}>Trash</button>
+        <button onClick={() => { setSetupChoice(true); setAgenda(false); setDirectory(null); setTrash(true); }}>Trash</button>
         <label>
           Folder
           <select value={folder} onChange={(e) => setFolder(e.target.value)}>
@@ -452,6 +471,7 @@ export function App() {
               </div>
             ))}
         </nav>
+        <SetupCard setup={setup} systemAudio={systemAudio} showOffer={setupChoice} />
         <button
           onClick={() =>
             void data<Preferences>("settings").then(setSettings).catch(fail)
@@ -460,7 +480,7 @@ export function App() {
           Settings
         </button>
       </aside>
-      <div className="workspace">
+      <div className={`workspace${note?.id === firstRunNote ? " setup-first-note" : ""}`}>
         {captureNote && visibleNote.current !== captureNote && <RecordingElsewhere title={recordingTitle} elapsed={elapsed} status={status} problem={recordErrors[captureNote] ? "Recording needs attention" : undefined} onGo={goToRecording} onStop={stopOther} /> }
         {error && (
           <div role="alert">
@@ -468,39 +488,29 @@ export function App() {
             <button onClick={() => setError("")}>Dismiss</button>
           </div>
         )}
+        {progress && <p role="status">{progress}</p>}
+        {setup.justCompleted && status === "stopped" && !saveTimer.current && <section role="status">
+          {setup.status?.mic_checked ? <><h2>✓ TalkKeeper is fully set up</h2><p>Recording and AI notes both work, and everything stays on this computer.</p><button onClick={()=>void create().catch(fail)}>Start a note</button></> : <><p>AI notes are ready. One thing left: check your microphone.</p><button onClick={()=>void setup.checkMicrophone()}>Check my microphone</button></>}
+          <button onClick={()=>setup.setJustCompleted(false)}>Dismiss</button>
+        </section>}
+        {settings && setup.speechReady && <button onClick={()=>void setup.checkMicrophone()}>Check my microphone</button>}
         {settings ? (
           <Settings
             initial={settings}
             onClose={() => {
               setSettings(null);
-              void invoke<{ completed: boolean; custom: boolean }>(
-                "setup_status",
-              )
-                .then((s) => setSetupNeeded(!s.completed && !s.custom))
-                .catch(fail);
+              void setup.refresh();
             }}
             onError={fail}
           />
-        ) : setupNeeded !== false ? (
-          setupNeeded === null ? (
-            <p role="status">Checking setup…</p>
-          ) : (
-            <Setup
-              onReady={() => {
-                setSetupNeeded(false);
-                void create().catch(fail);
-              }}
-              onAdvanced={() =>
-                void data<Preferences>("settings")
-                  .then((p) => setSettings({ ...p, provider: "Ollama" }))
-                  .catch(fail)
-              }
-            />
-          )
+        ) : setup.statusError && !setupChoice ? (
+          <section role="alert"><p>TalkKeeper couldn't open its saved settings.</p><button onClick={() => void setup.refresh()}>Try again</button><button onClick={setup.startAnyway}>Start anyway</button></section>
+        ) : setupNeeded ? (
+          <Setup setup={setup} onStart={() => { setSetupChoice(true); void create(true).catch(fail); }} />
         ) : agenda ? (
           <Agenda onOpen={n => void select(n).then(refresh).catch(fail)} onError={fail} />
         ) : workspaceChat ? (
-          <WorkspaceChat
+          !setup.aiReady ? <p role="status">Ask your notes will be ready when the AI model finishes downloading ({setup.eta}).</p> : <WorkspaceChat
             selected={selectedNotes}
             folders={folders}
             onOpen={(id, seq) => {
@@ -540,7 +550,9 @@ export function App() {
           />
         ) : note ? (
           <>
-            <RecordBar key={`record-${note.id}`} state={!statusLoaded || (starting && captureNote === note.id) ? "starting" : captureNote === note.id ? status : "stopped"} elapsed={captureNote === note.id || finishedNote === note.id || (captureNote && captureNote !== note.id) ? elapsed : durations[note.id] ?? 0} hasTranscript={segments.length > 0} finished={finishedNote === note.id} systemAudio={systemAudio} speechSize={speechSize} lag={lag} levels={levels} levelsAt={levelsAt} warning={warning?.note_id === note.id && warning.active ? warning.kind : null} silence={autoStop} error={recordError} errorEnded={failedTakes[note.id] !== undefined} errorElapsed={failedTakes[note.id]} otherTitle={captureNote && captureNote !== note.id ? recordingTitle : undefined} trashed={!!note.deleted_at} dictating={dictating} wordsAt={wordsAt}
+            {!setup.speechReady && <p>Recording will be ready in about a minute. You can type notes now.</p>}
+            {setup.speechReady && !setup.aiReady && <p>You can record now. AI notes will be written when the AI model finishes downloading.</p>}
+            <RecordBar key={`record-${note.id}`} state={!statusLoaded || (starting && captureNote === note.id) ? "starting" : captureNote === note.id ? status : "stopped"} elapsed={captureNote === note.id || finishedNote === note.id || (captureNote && captureNote !== note.id) ? elapsed : durations[note.id] ?? 0} hasTranscript={segments.length > 0} finished={finishedNote === note.id} systemAudio={systemAudio} speechSize={speechSize} lag={lag} levels={levels} levelsAt={levelsAt} warning={warning?.note_id === note.id && warning.active ? warning.kind : null} silence={autoStop} error={recordError} errorEnded={failedTakes[note.id] !== undefined} errorElapsed={failedTakes[note.id]} otherTitle={captureNote && captureNote !== note.id ? recordingTitle : undefined} trashed={!!note.deleted_at} dictating={dictating} speechReady={setup.speechReady} wordsAt={wordsAt}
               onCommand={command => void capture(command)} onSettings={() => void data<Preferences>("settings").then(setSettings).catch(fail)} onMicrophone={() => void invoke("open_microphone_settings").catch(() => data<Preferences>("settings").then(setSettings))} onDismissSilence={() => setAutoStop(false)} onRestore={() => void mutate("restore").catch(fail)} onGo={goToRecording} onStopOther={stopOther} onStopDictation={() => void invoke("dictation_control", {action:"stop"}).catch(e => setRecordError(String(e)))} onCopyNotice={() => void data("copy_notice").catch(e => setRecordError(String(e)))} onDownload={() => void downloadSpeech()} download={download} downloadReady={downloadReady}
               snapshots={<SnapshotControls noteId={note.id} status={status} onError={e => setRecordError(String(e))} />} />
             <CalendarLink note={note} onError={fail} onOpen={n => void select(n).catch(fail)} />
@@ -647,6 +659,8 @@ export function App() {
                     update({ notes_doc, notes_markdown })
                   }
                 />
+                {setup.writingNote === note.id && <p role="status">Writing AI notes…</p>}
+                {!setup.aiReady && <p role="status">{status === "stopped" && segments.length ? "Recording saved. AI notes for this meeting will be written automatically when the AI model is ready." : setup.paused ? "AI notes are waiting. The download is paused." : setup.status?.ai === "skipped" ? "AI notes aren't set up on this computer." : setup.eta === "working out time left…" ? "AI notes unlock when the download finishes · working out time left…" : `AI notes will be ready in ${setup.eta.replace(/ left$/, "")}`}</p>}
                 <div className="summary-tools">
                   <label>
                     Template
@@ -662,7 +676,7 @@ export function App() {
                     </select>
                   </label>
                   <button
-                    disabled={enhancing || trash || !!note.summary_markdown}
+                    disabled={!setup.aiReady || enhancing || trash || !!note.summary_markdown}
                     onClick={() => void enhance()}
                   >
                     {enhancing
@@ -708,7 +722,7 @@ export function App() {
                 onCopy={<CopyTranscript note={note} segments={segments} />}
               />
             </div>
-            <Chat
+            {setup.aiReady ? <Chat
               onSettings={() =>
                 void data<Preferences>("settings").then(setSettings).catch(fail)
               }
@@ -723,7 +737,7 @@ export function App() {
                 setNote(n);
                 void refresh().catch(fail);
               }}
-            />
+            /> : <p>Available when the AI model finishes downloading.</p>}
           </>
         ) : (
           <section className="empty">

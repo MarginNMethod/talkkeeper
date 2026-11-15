@@ -90,6 +90,7 @@ export interface RecordBarProps {
   otherTitle?: string;
   trashed?: boolean;
   dictating?: boolean;
+  speechReady?: boolean;
   wordsAt?: number;
   levelsAt?: number;
   onCommand: (command: string) => void;
@@ -156,7 +157,7 @@ export function RecordBar(p: RecordBarProps) {
       lastSound.current = p.elapsed;
   }, [now, p.state, p.levels.Me]);
   const active = p.state === "recording" || p.state === "paused";
-  const blocked = p.trashed || !!p.otherTitle || p.dictating;
+  const blocked = p.trashed || !!p.otherTitle || p.dictating || p.speechReady === false;
   const label =
     p.state === "starting"
       ? "Starting…"

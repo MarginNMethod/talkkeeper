@@ -178,7 +178,8 @@ async fn offline_and_pre_cancelled_setup_have_actionable_errors() {
         .unwrap_err();
     assert!(matches!(error, Error::Blocked));
     assert!(error.to_string().contains("firewall"));
-    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+    assert!(!dir.path().join("runtime").exists());
+    assert!(!dir.path().join("engine.download").exists());
     let cancel = CancellationToken::new();
     cancel.cancel();
     let result = Setup::new(dir.path())

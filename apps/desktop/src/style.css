@@ -330,3 +330,16 @@ meter {
 .record-bar button:focus-visible, .transcript button:focus-visible { outline: 3px solid #3268d3; outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .record-dot { animation: none; } }
 @media (prefers-color-scheme: dark) { .record-bar.is-paused, .record-warning { background: #4a3f22; }.record-problem { background: #573e32; }.record-main { background: #e06a5c; } }
+.setup-welcome { max-width: 440px; margin: auto; }
+button.primary { background: var(--accent); color: white; }
+.setup-card { padding: 12px; border: 1px solid #aaa; font-size: .85rem; margin-top: auto; }
+.setup-card p { margin: 6px 0; }
+.setup-card progress { width: 85%; }
+.setup-card .checking { animation: setup-check 1s ease-in-out infinite alternate; }
+@keyframes setup-check { to { opacity: .4; } }
+.setup-spinner { display: inline-block; width: 1em; height: 1em; margin-right: .5em; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: setup-spin 1s linear infinite; }
+@keyframes setup-spin { to { transform: rotate(360deg); } }
+.setup-first-note .tiptap p:only-child:has(> br:only-child)::before { content: "Type your notes here. Press Record to capture what's said."; float: left; height: 0; color: var(--muted); pointer-events: none; }
+.setup-card progress { accent-color: var(--accent); }
+.setup-card progress::-webkit-progress-value { background: var(--accent); }
+.setup-card progress::-moz-progress-bar { background: var(--accent); }

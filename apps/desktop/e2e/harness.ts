@@ -22,7 +22,10 @@ const recipes = [
 ];
 const firstRun = new URLSearchParams(location.search).has("setup");
 let setupDone = !firstRun;
-let setupAttempts = 0;
+let speechReady = !firstRun;
+let setupStarted = false;
+let setupPaused = false;
+let setupProgress: Record<string, unknown> = {};
 let dictationConfig: Record<string, unknown> | null = null;
 let dictations: Record<string, unknown>[] = [];
 const listeners: Record<string, number[]> = {};
@@ -71,7 +74,12 @@ mockIPC(async (command, args) => {
     return;
   }
   if (command === "setup_status")
-    return { completed: setupDone, custom: false };
+    return { notes:true, completed: setupDone, custom: false, pending:setupStarted, paused:setupPaused, speech:speechReady ? "ready" : "missing", ai:setupDone ? "ready" : "downloading" };
+  if(command === "setup_progress") return {running:setupStarted && !setupDone, progress:setupProgress};
+  if(command === "setup_cancel") {setupPaused=true;return;}
+  if(command === "setup_test_provider") return [{id:"test-model"}];
+  if(command === "setup_check_microphone") return "success";
+  if(command === "setup_mic_checked") return;
   if (command === "setup_plan")
     return {
       llm: {
@@ -90,38 +98,18 @@ mockIPC(async (command, args) => {
       can_install: true,
     };
   if (command === "setup_run") {
-    if (
-      new URLSearchParams(location.search).has("failure") &&
-      setupAttempts++ === 0
-    )
-      throw new Error("Check your connection and retry.");
-    for (const handler of listeners["setup://progress"] ?? [])
-      (
-        window as unknown as {
-          __TAURI_INTERNALS__: {
-            runCallback: (id: number, arg: unknown) => void;
-          };
-        }
-      ).__TAURI_INTERNALS__.runCallback(handler, {
-        event: "setup://progress",
-        id: 1,
-        payload: {
-          stage: "PullModel",
-          completed: 50,
-          total: 100,
-          percent: 50,
-          message: "Downloading your AI model",
-        },
-      });
-
+    setupStarted=true;setupPaused=false;
+    const update = (stage:string,completed:number,total:number,message:string) => {
+      const p={stage,completed,total,message};setupProgress={...setupProgress,[stage]:p};emit("setup://progress",p);
+    };
+    update("DownloadSpeechModel",39e6,78e6,"Downloading speech");
+    const controls = window as unknown as { readySpeech:()=>void;finishSetup:()=>void;offlineSetup:()=>void };
+    controls.readySpeech=()=>{speechReady=true;update("SpeechReady",1,1,"Recording is ready");emit("setup://unlocked","speech");update("PullModel",1.35e9,2.7e9,"Downloading AI model");};
+    controls.offlineSetup=()=>update("Check",0,0,"Waiting for the internet. Your download is saved and will carry on by itself.");
     if (new URLSearchParams(location.search).has("hold")) {
-      await new Promise<void>((resolve) => {
-        (window as unknown as { finishSetup: () => void }).finishSetup =
-          resolve;
-      });
+      await new Promise<void>(resolve=>{controls.finishSetup=resolve;});
     }
-    setupDone = true;
-    return;
+    controls.readySpeech();setupDone=true;update("Verify",1,1,"AI notes are ready");emit("setup://unlocked","ai");return;
   }
   if (command === "calendar_data") {
     if (a.action === "add") calendarAdded = true;
@@ -347,6 +335,7 @@ mockIPC(async (command, args) => {
         return [];
       case "segments":
         if (recordingTest) return structuredClone(recordingLines[String(p.id)] ?? []);
+        if (new URLSearchParams(location.search).has("setup")) return [];
         return [
           {
             id: "s1",
