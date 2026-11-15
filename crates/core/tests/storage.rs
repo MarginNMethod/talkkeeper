@@ -75,6 +75,8 @@ fn segments_search_trash_and_retention() {
         )
         .unwrap()
         .is_empty());
+    assert_eq!(s.apply_transcript_retention(0).unwrap(), 0);
+    assert_eq!(s.list_transcript_segments(n.id).unwrap().len(), 3);
     assert_eq!(s.apply_transcript_retention(30).unwrap(), 1);
     assert!(s.search("ancientword", &filters, 10).unwrap().is_empty());
     assert_eq!(s.delete_transcript_segments(n.id, &[b.id]).unwrap(), 1);

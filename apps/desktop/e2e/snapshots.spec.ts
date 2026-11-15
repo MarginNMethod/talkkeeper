@@ -15,16 +15,16 @@ test("meeting snapshots require consent, show count and gallery, delete and keep
   await page.goto("/");
   await page.getByRole("button", { name: "New note", exact: true }).click();
   await page
-    .getByRole("button", { name: "Start capture", exact: true })
+    .getByRole("button", { name: "Record more", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Capture shared screen", exact: true })
+    .getByRole("button", { name: "Add screen snapshots", exact: true })
     .click();
   await expect(
     page.getByRole("button", { name: "Start snapshots", exact: true }),
   ).toBeDisabled();
   await page
-    .getByLabel("I understand and agree to capture this source")
+    .getByLabel("I understand and agree to take pictures of this source")
     .check();
   await expect(page.getByRole("option", { name: "Slides window" })).toHaveCount(
     1,
@@ -38,7 +38,7 @@ test("meeting snapshots require consent, show count and gallery, delete and keep
   await expect(
     page
       .getByRole("status")
-      .filter({ hasText: "Screen snapshots on · 1 snapshots" }),
+      .filter({ hasText: "Screen snapshots on · 1" }),
   ).toBeVisible();
   const gallery = page.getByRole("region", {
     name: "Screen snapshots",
@@ -59,12 +59,12 @@ test("meeting snapshots require consent, show count and gallery, delete and keep
   await expect(
     page
       .getByRole("status")
-      .filter({ hasText: "Screen snapshots on · 0 snapshots" }),
+      .filter({ hasText: "Screen snapshots on · 0" }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Stop snapshots", exact: true })
+    .getByRole("button", { name: "Turn off", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "Capture shared screen", exact: true }),
+    page.getByRole("button", { name: "Add screen snapshots", exact: true }),
   ).toBeVisible();
 });

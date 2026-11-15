@@ -165,6 +165,21 @@ impl SttSession {
         self.input.ready.notify_one();
         Ok(())
     }
+    /// Seconds of queued audio, excluding the chunk currently being decoded.
+    pub fn pending_seconds(&self) -> u64 {
+        let pending = self.input.pending.lock().unwrap();
+        let (mic, system) = pending
+            .audio
+            .iter()
+            .fold((0_u64, 0_u64), |(mic, system), chunk| {
+                let ms = chunk.samples.len() as u64 * 1000 / u64::from(chunk.sample_rate);
+                match chunk.channel {
+                    Channel::Mic => (mic + ms, system),
+                    Channel::System => (mic, system + ms),
+                }
+            });
+        mic.max(system) / 1000
+    }
     pub fn take_overflow(&self) -> bool {
         std::mem::take(&mut self.input.pending.lock().unwrap().overflow)
     }

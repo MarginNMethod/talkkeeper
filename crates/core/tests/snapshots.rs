@@ -38,6 +38,7 @@ fn snapshot_files_limits_retention_trash_restore_and_cascade() {
     assert!(store.add_snapshot(&snapshot(&note), &[255, 216]).is_err());
     assert_eq!(store.snapshots(note.id).unwrap().len(), 2);
     store.restore_note(note.id).unwrap();
+    assert_eq!(store.apply_snapshot_retention(0).unwrap(), 0);
     assert_eq!(store.apply_snapshot_retention(30).unwrap(), 1);
     assert!(!dir
         .path()

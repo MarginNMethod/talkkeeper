@@ -29,6 +29,10 @@ const listeners: Record<string, number[]> = {};
 let snapshots: Record<string, unknown>[] = [];
 let screenEnabled = false;
 let captureNote = "";
+let captureState = "stopped";
+let captureStarted = 0;
+const recordingTest = new URLSearchParams(location.search).has("recording");
+const recordingLines: Record<string, Record<string, unknown>[]> = {};
 function emit(event: string, payload: unknown) {
   for (const handler of listeners[event] ?? [])
     (window as unknown as { __TAURI_INTERNALS__: { runCallback: (id: number, arg: unknown) => void } }).__TAURI_INTERNALS__.runCallback(handler, { event, id: 1, payload: structuredClone(payload) });
@@ -123,9 +127,29 @@ mockIPC(async (command, args) => {
     if (a.action === "add") calendarAdded = true;
     return { count: 1 };
   }
+  if (command === "capture_status") return { note_id:captureNote || null,state:captureState,elapsed_ms:captureStarted ? Date.now()-captureStarted : 0 };
+  if (["stop_capture","pause_capture","resume_capture"].includes(command)) {
+    if (a.noteId !== captureNote) throw new Error("Recording belongs to another note");
+    captureState = command === "stop_capture" ? "stopped" : command === "pause_capture" ? "paused" : "recording";
+    emit("capture://state", {note_id:captureNote,state:captureState,elapsed_ms:Date.now()-captureStarted});
+    if (captureState === "stopped") captureNote = "";
+    return;
+  }
   if (command === "capture_capabilities") return { system_audio: false };
   if (command === "open_microphone_settings") return;
-  if (command === "start_capture") { captureNote = String(a.noteId); emit("capture://state", { note_id: captureNote, state: "recording" }); return; }
+  if (command === "start_capture") {
+    captureNote = String(a.noteId); captureStarted = Date.now(); captureState = "recording";
+    emit("capture://state", { note_id: captureNote, state: "recording" });
+    if (recordingTest) {
+      const id = captureNote;
+      setTimeout(() => {
+        if (captureState !== "recording" || captureNote !== id) return;
+        const line = {id:`line-${id}`,note_id:id,seq:1,start_ms:0,speaker:"Me",text:"Planning together."};
+        recordingLines[id] = [line]; emit("transcript://segment",line);
+      },150);
+    }
+    return;
+  }
   if (command === "snapshot_ai_status") return { supports_images: false, cloud: false, confirmed: true };
   if (command === "snapshot_control") {
     if (a.action === "status") return { enabled: screenEnabled };
@@ -322,6 +346,7 @@ mockIPC(async (command, args) => {
       case "folders":
         return [];
       case "segments":
+        if (recordingTest) return structuredClone(recordingLines[String(p.id)] ?? []);
         return [
           {
             id: "s1",

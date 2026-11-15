@@ -215,17 +215,10 @@ export function Settings({
         </select>
       </label>
       <p>Always on uses the frontmost eligible window on the main display after your first confirmation. Screen images may contain private information.</p>
-      <label>Snapshot retention days<input type="number" min="0" max="36500" value={prefs.snapshot_retention ?? 30} onChange={(e) => field("snapshot_retention", Number(e.target.value))} /></label>
-      <label>
-        Transcript retention days
-        <input
-          type="number"
-          min="0"
-          max="36500"
-          value={prefs.retention ?? 30}
-          onChange={(e) => field("retention", Number(e.target.value))}
-        />
-      </label>
+      {([['snapshot_retention', 'Keep screen pictures for', 'After this, pictures taken of your screen during a meeting are deleted.'], ['retention', 'Keep transcripts for', 'After this, the word-for-word transcript is deleted. Your notes and summaries are always kept.']] as const).map(([key, label, hint]) => <div key={key}><label>{label}<select value={prefs[key] ?? 0} onChange={e => field(key, Number(e.target.value))}>
+        {[[0, 'Keep forever'], [365, '1 year'], [90, '90 days'], [30, '30 days']].map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+        {prefs[key] !== undefined && ![0, 365, 90, 30].includes(prefs[key]!) && <option value={prefs[key]}>{prefs[key]} days</option>}
+      </select></label><p>{hint}</p></div>)}
       <label>
         Participant notice
         <textarea
