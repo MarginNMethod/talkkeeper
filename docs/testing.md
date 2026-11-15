@@ -185,3 +185,20 @@ These native-client checks require real machines and are not replaced by mockIPC
 browser tests. Automated stdio integration tests cover the actual Rust binary,
 read-only writes, file stability, schema refusal, privacy, limits, malformed input,
 rotation and WAL reads while an app writer holds a transaction.
+
+## Meeting recording on macOS
+
+1. Install a fresh default build, reset microphone consent if previously granted,
+   and complete setup. Start a note and press **Start capture**. **Starting…**
+   appears and a second click is disabled. The macOS microphone permission prompt
+   must appear. Allow access, speak a sentence and pause: levels must continue
+   moving and transcript text should appear within about 10 seconds.
+2. Deny microphone access and try again (also test voice typing). Verify a clear
+   error directing you to System Settings > Privacy & Security > Microphone, with
+   **Open microphone settings**. Press it, allow access, and retry.
+3. Select a silent input. After about four seconds verify the inline no-sound
+   warning and settings button. Speak into the selected input: the warning clears.
+   Default macOS builds must show the microphone-only note throughout.
+4. Use a slow speech model: continue speaking while text is delayed. Levels and
+   pause/stop controls must remain responsive and pending text must drain on stop.
+   Native permission behavior and Apple Silicon speed require real macOS hardware.

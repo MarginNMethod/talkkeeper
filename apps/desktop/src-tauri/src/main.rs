@@ -641,6 +641,8 @@ fn main() {
             download_model,
             snapshots::snapshot_control,
             snapshots::snapshot_ai_status,
+            session::capture_capabilities,
+            session::open_microphone_settings,
             session::start_capture,
             session::pause_capture,
             session::resume_capture,
