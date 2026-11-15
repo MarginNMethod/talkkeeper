@@ -30,7 +30,7 @@ const note = {
   created_at: "2026-01-02T10:00:00Z",
   summary_markdown: "Long notes",
   attendees: [],
-  notes_markdown: "Rough notes",
+  notes_markdown: "Your notes",
 } as unknown as Note;
 const segments: Segment[] = [
   {
@@ -56,9 +56,7 @@ test("copy formats timestamps, speakers, and text only", () => {
 test("copy variants announce success and clipboard failure exposes select all", async () => {
   vi.mocked(data).mockResolvedValue(null);
   render(<CopyTranscript note={note} segments={segments} />);
-  fireEvent.change(screen.getByLabelText("Transcript format"), {
-    target: { value: "text" },
-  });
+  fireEvent.click(screen.getByLabelText("Include times"));
   fireEvent.click(screen.getByLabelText("Include speaker names"));
   fireEvent.click(screen.getByText("Copy transcript"));
   await waitFor(() =>
@@ -130,10 +128,10 @@ test("chat streams a proposal, applies explicitly, discards, restores and expose
     />,
   );
   await waitFor(() =>
-    expect(screen.getByText("Proposed revision")).toBeTruthy(),
+    expect(screen.getByText("Suggested changes")).toBeTruthy(),
   );
   expect(data).not.toHaveBeenCalledWith("apply_revision", expect.anything());
-  expect(screen.getByText(/Cloud provider active/)).toBeTruthy();
+  expect(screen.getByText(/Online service active/)).toBeTruthy();
   fireEvent.click(screen.getByText("Rewrite these notes shorter"));
   fireEvent.click(screen.getByText("Send"));
   await waitFor(() => expect(invoke).toHaveBeenCalled());
@@ -172,6 +170,6 @@ test("chat streams a proposal, applies explicitly, discards, restores and expose
   );
   fireEvent.click(await screen.findByText("Discard"));
   await waitFor(() =>
-    expect(screen.queryByText("Proposed revision")).toBeNull(),
+    expect(screen.queryByText("Suggested changes")).toBeNull(),
   );
 });

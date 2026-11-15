@@ -1,6 +1,13 @@
-const recordingPreferences = {recording_consent_confirmed:true, meeting_microphone:""};
+const recordingPreferences = {
+  recording_consent_confirmed: true,
+  meeting_microphone: "",
+};
 let calendarAdded = false;
-const mcpPreferences: Record<string, boolean> = { enabled: false, include_transcripts: false, include_calendar: false };
+const mcpPreferences: Record<string, boolean> = {
+  enabled: false,
+  include_transcripts: false,
+  include_calendar: false,
+};
 let mcpAccess = [{ timestamp: "2026-11-12T10:00:00Z", tool: "search_notes" }];
 import { mockIPC } from "@tauri-apps/api/mocks";
 let chat: Record<string, unknown>[] = [];
@@ -39,7 +46,17 @@ const recordingTest = new URLSearchParams(location.search).has("recording");
 const recordingLines: Record<string, Record<string, unknown>[]> = {};
 function emit(event: string, payload: unknown) {
   for (const handler of listeners[event] ?? [])
-    (window as unknown as { __TAURI_INTERNALS__: { runCallback: (id: number, arg: unknown) => void } }).__TAURI_INTERNALS__.runCallback(handler, { event, id: 1, payload: structuredClone(payload) });
+    (
+      window as unknown as {
+        __TAURI_INTERNALS__: {
+          runCallback: (id: number, arg: unknown) => void;
+        };
+      }
+    ).__TAURI_INTERNALS__.runCallback(handler, {
+      event,
+      id: 1,
+      payload: structuredClone(payload),
+    });
 }
 mockIPC(async (command, args) => {
   const a = args as Record<string, unknown>;
@@ -51,36 +68,99 @@ mockIPC(async (command, args) => {
   if (command === "plugin:event|unlisten") return;
   if (command === "mcp_data") {
     const p = a.payload as { key: string; value: boolean };
-    if (a.action === "status") return structuredClone({ preferences: mcpPreferences, executable: "/opt/TalkKeeper/talkkeeper-mcp", database: "/data/talkkeeper.sqlite" });
-    if (a.action === "set") { mcpPreferences[p.key] = p.value; return; }
+    if (a.action === "status")
+      return structuredClone({
+        preferences: mcpPreferences,
+        executable: "/opt/TalkKeeper/talkkeeper-mcp",
+        database: "/data/talkkeeper.sqlite",
+      });
+    if (a.action === "set") {
+      mcpPreferences[p.key] = p.value;
+      return;
+    }
     if (a.action === "recent") return structuredClone(mcpAccess);
-    if (a.action === "clear") { mcpAccess = []; return; }
-    if (a.action === "check") return mcpPreferences.enabled ? "Ready. Notes can be read by connected tools." : "Turn on 'Connect other AI tools' in TalkKeeper settings";
+    if (a.action === "clear") {
+      mcpAccess = [];
+      return;
+    }
+    if (a.action === "check")
+      return mcpPreferences.enabled
+        ? "Ready. Notes can be read by connected tools."
+        : "Turn on 'Let other AI apps read your notes' in TalkKeeper settings";
   }
   if (command === "dictation_data") {
     const p = a.payload as Record<string, unknown>;
     if (a.action === "settings") return structuredClone(dictationConfig);
-    if (a.action === "save") { dictationConfig = structuredClone(p); return; }
+    if (a.action === "save") {
+      dictationConfig = structuredClone(p);
+      return;
+    }
     if (a.action === "history") return structuredClone(dictations);
-    if (a.action === "permissions") return { microphone: "Enable Microphone", paste: "Enable Accessibility in Privacy & Security", devices: ["Test mic"] };
+    if (a.action === "permissions")
+      return {
+        microphone: "Enable Microphone",
+        paste: "Enable Accessibility in Privacy & Security",
+        devices: ["Test mic"],
+      };
   }
   if (command === "dictation_control") {
     for (const state of ["listening", "transcribing", "inserting"]) {
       for (const handler of listeners["dictation://state"] ?? [])
-        (window as unknown as { __TAURI_INTERNALS__: { runCallback: (id: number, arg: unknown) => void } }).__TAURI_INTERNALS__.runCallback(handler, { event: "dictation://state", id: 1, payload: { state } });
+        (
+          window as unknown as {
+            __TAURI_INTERNALS__: {
+              runCallback: (id: number, arg: unknown) => void;
+            };
+          }
+        ).__TAURI_INTERNALS__.runCallback(handler, {
+          event: "dictation://state",
+          id: 1,
+          payload: { state },
+        });
     }
-    dictations = [{ id: "dictation-1", text: "Plant herbs tomorrow.", created_at: new Date().toISOString() }];
+    dictations = [
+      {
+        id: "dictation-1",
+        text: "Plant herbs tomorrow.",
+        created_at: new Date().toISOString(),
+      },
+    ];
     for (const handler of listeners["dictation://history"] ?? [])
-      (window as unknown as { __TAURI_INTERNALS__: { runCallback: (id: number, arg: unknown) => void } }).__TAURI_INTERNALS__.runCallback(handler, { event: "dictation://history", id: 1, payload: { notice: "Automatic paste unavailable. Enable Accessibility in Privacy & Security; text remains on clipboard." } });
+      (
+        window as unknown as {
+          __TAURI_INTERNALS__: {
+            runCallback: (id: number, arg: unknown) => void;
+          };
+        }
+      ).__TAURI_INTERNALS__.runCallback(handler, {
+        event: "dictation://history",
+        id: 1,
+        payload: {
+          notice:
+            "Automatic paste unavailable. Enable Accessibility in Privacy & Security; text remains on clipboard.",
+        },
+      });
     return;
   }
   if (command === "setup_status")
-    return { notes:true, completed: setupDone, custom: false, pending:setupStarted, paused:setupPaused, speech:speechReady ? "ready" : "missing", ai:setupDone ? "ready" : "downloading" };
-  if(command === "setup_progress") return {running:setupStarted && !setupDone, progress:setupProgress};
-  if(command === "setup_cancel") {setupPaused=true;return;}
-  if(command === "setup_test_provider") return [{id:"test-model"}];
-  if(command === "setup_check_microphone") return "success";
-  if(command === "setup_mic_checked") return;
+    return {
+      notes: true,
+      completed: setupDone,
+      custom: false,
+      pending: setupStarted,
+      paused: setupPaused,
+      speech: speechReady ? "ready" : "missing",
+      ai: setupDone ? "ready" : "downloading",
+    };
+  if (command === "setup_progress")
+    return { running: setupStarted && !setupDone, progress: setupProgress };
+  if (command === "setup_cancel") {
+    setupPaused = true;
+    return;
+  }
+  if (command === "setup_test_provider") return [{ id: "test-model" }];
+  if (command === "setup_check_microphone") return "success";
+  if (command === "setup_mic_checked") return;
   if (command === "setup_plan")
     return {
       llm: {
@@ -99,59 +179,136 @@ mockIPC(async (command, args) => {
       can_install: true,
     };
   if (command === "setup_run") {
-    setupStarted=true;setupPaused=false;
-    const update = (stage:string,completed:number,total:number,message:string) => {
-      const p={stage,completed,total,message};setupProgress={...setupProgress,[stage]:p};emit("setup://progress",p);
+    setupStarted = true;
+    setupPaused = false;
+    const update = (
+      stage: string,
+      completed: number,
+      total: number,
+      message: string,
+    ) => {
+      const p = { stage, completed, total, message };
+      setupProgress = { ...setupProgress, [stage]: p };
+      emit("setup://progress", p);
     };
-    update("DownloadSpeechModel",39e6,78e6,"Downloading speech");
-    const controls = window as unknown as { readySpeech:()=>void;finishSetup:()=>void;offlineSetup:()=>void };
-    controls.readySpeech=()=>{speechReady=true;update("SpeechReady",1,1,"Recording is ready");emit("setup://unlocked","speech");update("PullModel",1.35e9,2.7e9,"Downloading AI model");};
-    controls.offlineSetup=()=>update("Check",0,0,"Waiting for the internet. Your download is saved and will carry on by itself.");
+    update("DownloadSpeechModel", 39e6, 78e6, "Downloading speech");
+    const controls = window as unknown as {
+      readySpeech: () => void;
+      finishSetup: () => void;
+      offlineSetup: () => void;
+    };
+    controls.readySpeech = () => {
+      speechReady = true;
+      update("SpeechReady", 1, 1, "Recording is ready");
+      emit("setup://unlocked", "speech");
+      update("PullModel", 1.35e9, 2.7e9, "Downloading AI model");
+    };
+    controls.offlineSetup = () =>
+      update(
+        "Check",
+        0,
+        0,
+        "Waiting for the internet. Your download is saved and will carry on by itself.",
+      );
     if (new URLSearchParams(location.search).has("hold")) {
-      await new Promise<void>(resolve=>{controls.finishSetup=resolve;});
+      await new Promise<void>((resolve) => {
+        controls.finishSetup = resolve;
+      });
     }
-    controls.readySpeech();setupDone=true;update("Verify",1,1,"AI notes are ready");emit("setup://unlocked","ai");return;
+    controls.readySpeech();
+    setupDone = true;
+    update("Verify", 1, 1, "AI notes are ready");
+    emit("setup://unlocked", "ai");
+    return;
   }
   if (command === "calendar_data") {
     if (a.action === "add") calendarAdded = true;
     return { count: 1 };
   }
-  if (command === "list_input_devices") return ["Built-in microphone", "USB microphone"];
-  if (command === "recording_preferences") { Object.assign(recordingPreferences, a.microphone !== undefined ? {meeting_microphone:a.microphone} : {}, a.consent !== undefined ? {recording_consent_confirmed:a.consent} : {}); return; }
-  if (command === "capture_status") return { note_id:captureNote || null,state:captureState,elapsed_ms:captureStarted ? Date.now()-captureStarted : 0 };
-  if (["stop_capture","pause_capture","resume_capture"].includes(command)) {
-    if (a.noteId !== captureNote) throw new Error("Recording belongs to another note");
-    captureState = command === "stop_capture" ? "stopped" : command === "pause_capture" ? "paused" : "recording";
-    emit("capture://state", {note_id:captureNote,state:captureState,elapsed_ms:Date.now()-captureStarted});
+  if (command === "list_input_devices")
+    return ["Built-in microphone", "USB microphone"];
+  if (command === "recording_preferences") {
+    Object.assign(
+      recordingPreferences,
+      a.microphone !== undefined ? { meeting_microphone: a.microphone } : {},
+      a.consent !== undefined ? { recording_consent_confirmed: a.consent } : {},
+    );
+    return;
+  }
+  if (command === "capture_status")
+    return {
+      note_id: captureNote || null,
+      state: captureState,
+      elapsed_ms: captureStarted ? Date.now() - captureStarted : 0,
+    };
+  if (["stop_capture", "pause_capture", "resume_capture"].includes(command)) {
+    if (a.noteId !== captureNote)
+      throw new Error("Recording belongs to another note");
+    captureState =
+      command === "stop_capture"
+        ? "stopped"
+        : command === "pause_capture"
+          ? "paused"
+          : "recording";
+    emit("capture://state", {
+      note_id: captureNote,
+      state: captureState,
+      elapsed_ms: Date.now() - captureStarted,
+    });
     if (captureState === "stopped") captureNote = "";
     return;
   }
   if (command === "capture_capabilities") return { system_audio: false };
   if (command === "open_microphone_settings") return;
   if (command === "start_capture") {
-    captureNote = String(a.noteId); captureStarted = Date.now(); captureState = "recording";
+    captureNote = String(a.noteId);
+    captureStarted = Date.now();
+    captureState = "recording";
     emit("capture://state", { note_id: captureNote, state: "recording" });
     if (recordingTest) {
       const id = captureNote;
       setTimeout(() => {
         if (captureState !== "recording" || captureNote !== id) return;
-        const line = {id:`line-${id}`,note_id:id,seq:1,start_ms:0,speaker:"Me",text:"Planning together."};
-        recordingLines[id] = [line]; emit("transcript://segment",line);
-      },150);
+        const line = {
+          id: `line-${id}`,
+          note_id: id,
+          seq: 1,
+          start_ms: 0,
+          speaker: "Me",
+          text: "Planning together.",
+        };
+        recordingLines[id] = [line];
+        emit("transcript://segment", line);
+      }, 150);
     }
     return;
   }
-  if (command === "snapshot_ai_status") return { supports_images: false, cloud: false, confirmed: true };
+  if (command === "snapshot_ai_status")
+    return { supports_images: false, cloud: false, confirmed: true };
   if (command === "snapshot_control") {
     if (a.action === "status") return { enabled: screenEnabled };
-    if (a.action === "sources") return [{ id: "window:2", name: "Slides window" }];
+    if (a.action === "sources")
+      return [{ id: "window:2", name: "Slides window" }];
     if (a.action === "enable") {
       if (!a.confirmed) throw new Error("Confirm first");
       screenEnabled = true;
-      snapshots = [{ id: "snapshot-1", note_id: captureNote, captured_at: new Date().toISOString(), elapsed_ms: 10000, source: "Slides window", use_in_summary: true }];
-      emit("snapshots://changed", null); return true;
+      snapshots = [
+        {
+          id: "snapshot-1",
+          note_id: captureNote,
+          captured_at: new Date().toISOString(),
+          elapsed_ms: 10000,
+          source: "Slides window",
+          use_in_summary: true,
+        },
+      ];
+      emit("snapshots://changed", null);
+      return true;
     }
-    if (a.action === "disable") { screenEnabled = false; return; }
+    if (a.action === "disable") {
+      screenEnabled = false;
+      return;
+    }
     return false;
   }
   if (command === "chat_note") {
@@ -229,22 +386,63 @@ mockIPC(async (command, args) => {
   }
   if (command === "data") {
     const p = a.payload as Record<string, unknown>;
-    const calendarEvent = { source_id: "source", uid: "meeting", instance_start: new Date().toISOString(), instance_end: new Date(Date.now()+3600000).toISOString(), all_day: false, title: "Calendar planning", attendees: [{ name: "Alex", email: "alex@example.test" }], meeting_url: null };
+    const calendarEvent = {
+      source_id: "source",
+      uid: "meeting",
+      instance_start: new Date().toISOString(),
+      instance_end: new Date(Date.now() + 3600000).toISOString(),
+      all_day: false,
+      title: "Calendar planning",
+      attendees: [{ name: "Alex", email: "alex@example.test" }],
+      meeting_url: null,
+    };
     switch (a.action) {
-      case "calendar_sources": return [];
-      case "calendar_events": return calendarAdded ? structuredClone([{event:calendarEvent,note_id:null}]) : [];
-      case "calendar_note": return notes.find(n => n.id === p.id)?.title === "Calendar planning" ? structuredClone(calendarEvent) : null;
+      case "calendar_sources":
+        return [];
+      case "calendar_events":
+        return calendarAdded
+          ? structuredClone([{ event: calendarEvent, note_id: null }])
+          : [];
+      case "calendar_note":
+        return notes.find((n) => n.id === p.id)?.title === "Calendar planning"
+          ? structuredClone(calendarEvent)
+          : null;
       case "calendar_start": {
-        const existing = notes.find(n=>n.title === "Calendar planning");
+        const existing = notes.find((n) => n.title === "Calendar planning");
         if (existing) return structuredClone(existing);
-        const note = {id:`note-${notes.length+1}`, title:"Calendar planning", created_at:new Date().toISOString(),updated_at:new Date().toISOString(),notes_doc:null,notes_markdown:"",summary_markdown:null,template_id:null,folder_id:null,attendees:calendarEvent.attendees,deleted_at:null};
-        notes.push(structuredClone(note));return structuredClone(note);
+        const note = {
+          id: `note-${notes.length + 1}`,
+          title: "Calendar planning",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          notes_doc: null,
+          notes_markdown: "",
+          summary_markdown: null,
+          template_id: null,
+          folder_id: null,
+          attendees: calendarEvent.attendees,
+          deleted_at: null,
+        };
+        notes.push(structuredClone(note));
+        return structuredClone(note);
       }
-      case "snapshots": return structuredClone(snapshots.filter((s) => s.note_id === p.id));
-      case "snapshot_image": return "data:image/jpeg;base64,/9j/2Q==";
-      case "snapshot_exclude": snapshots = snapshots.map((s) => s.id === p.snapshot ? { ...s, use_in_summary: !p.excluded } : s); return;
-      case "snapshot_delete": snapshots = snapshots.filter((s) => s.id !== p.snapshot); emit("snapshots://changed", null); return;
-      case "snapshot_delete_all": snapshots = []; emit("snapshots://changed", null); return;
+      case "snapshots":
+        return structuredClone(snapshots.filter((s) => s.note_id === p.id));
+      case "snapshot_image":
+        return "data:image/jpeg;base64,/9j/2Q==";
+      case "snapshot_exclude":
+        snapshots = snapshots.map((s) =>
+          s.id === p.snapshot ? { ...s, use_in_summary: !p.excluded } : s,
+        );
+        return;
+      case "snapshot_delete":
+        snapshots = snapshots.filter((s) => s.id !== p.snapshot);
+        emit("snapshots://changed", null);
+        return;
+      case "snapshot_delete_all":
+        snapshots = [];
+        emit("snapshots://changed", null);
+        return;
       case "people":
         return structuredClone(
           notes
@@ -302,7 +500,9 @@ mockIPC(async (command, args) => {
       case "versions":
         return structuredClone(versions);
       case "copy_text":
-        (window as unknown as { copiedText: string }).copiedText = String(p.text);
+        (window as unknown as { copiedText: string }).copiedText = String(
+          p.text,
+        );
         return null;
       case "apply_revision":
         versions.unshift({
@@ -337,7 +537,8 @@ mockIPC(async (command, args) => {
       case "folders":
         return [];
       case "segments":
-        if (recordingTest) return structuredClone(recordingLines[String(p.id)] ?? []);
+        if (recordingTest)
+          return structuredClone(recordingLines[String(p.id)] ?? []);
         if (new URLSearchParams(location.search).has("setup")) return [];
         return [
           {
@@ -360,7 +561,7 @@ mockIPC(async (command, args) => {
       case "start_note": {
         const n = {
           id: `note-${notes.length + 1}`,
-          title: "Untitled conversation",
+          title: "Untitled meeting",
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           notes_markdown: "",

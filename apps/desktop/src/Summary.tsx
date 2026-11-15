@@ -46,7 +46,7 @@ export function Summary({
                 return (
                   <details key={seq}>
                     <summary
-                      title={segment?.text ?? "Source segment unavailable"}
+                      title={segment?.text ?? "Source line unavailable"}
                     >
                       Source {seq}
                     </summary>
@@ -59,7 +59,7 @@ export function Summary({
                         : {segment.text}
                       </p>
                     ) : (
-                      <p>This segment has been removed or expired.</p>
+                      <p>This line has been deleted.</p>
                     )}
                   </details>
                 );

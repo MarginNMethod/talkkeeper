@@ -42,30 +42,30 @@ test("hotkey capture, styles, dictionary, permissions and history CRUD", async (
     <DictationSettings prefs={{ stt_engine: "cloud", provider: "OpenAI" }} />,
   );
   await screen.findByText("Plant herbs");
-  fireEvent.keyDown(screen.getByLabelText("Dictation hotkey"), {
+  fireEvent.keyDown(screen.getByLabelText("Keyboard shortcut"), {
     key: "d",
     code: "KeyD",
     ctrlKey: true,
     shiftKey: true,
   });
   expect(
-    (screen.getByLabelText("Dictation hotkey") as HTMLInputElement).value,
-  ).toBe("CommandOrControl+Shift+D");
-  fireEvent.change(screen.getByLabelText("Dictation style"), {
+    (screen.getByLabelText("Keyboard shortcut") as HTMLInputElement).value,
+  ).toBe("Ctrl+Shift+D");
+  fireEvent.change(screen.getByLabelText("Tidy up what I say"), {
     target: { value: "Formal" },
   });
   fireEvent.change(screen.getByLabelText("Style instructions"), {
     target: { value: "Keep names" },
   });
   fireEvent.click(screen.getByText("Add replacement"));
-  fireEvent.change(screen.getByLabelText("Spoken phrase 1"), {
+  fireEvent.change(screen.getByLabelText("When I say 1"), {
     target: { value: "tee keeper" },
   });
   fireEvent.change(screen.getByLabelText("Replacement 1"), {
     target: { value: "TalkKeeper" },
   });
-  fireEvent.click(screen.getByText("Save dictation settings"));
-  await screen.findByText("Dictation settings saved");
+  fireEvent.click(screen.getByText("Save voice typing settings"));
+  await screen.findByText("Voice typing settings saved");
   expect(invoke).toHaveBeenCalledWith(
     "dictation_data",
     expect.objectContaining({
@@ -77,15 +77,15 @@ test("hotkey capture, styles, dictionary, permissions and history CRUD", async (
       }),
     }),
   );
-  fireEvent.click(screen.getByText("Check permissions"));
+  fireEvent.click(screen.getByText("Check it can work"));
   await screen.findByText("Enable Accessibility");
-  fireEvent.change(screen.getByLabelText("Search dictation history"), {
+  fireEvent.change(screen.getByLabelText("Search what you have said"), {
     target: { value: "absent" },
   });
-  await screen.findByText("No dictations found.");
-  fireEvent.change(screen.getByLabelText("Search dictation history"), {
+  await screen.findByText("Nothing yet.");
+  fireEvent.change(screen.getByLabelText("Search what you have said"), {
     target: { value: "" },
   });
-  fireEvent.click(await screen.findByText("Delete dictation"));
+  fireEvent.click(await screen.findByText("Delete spoken text"));
   await waitFor(() => expect(screen.queryByText("Plant herbs")).toBeNull());
 });
