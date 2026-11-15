@@ -19,6 +19,8 @@ published.
    everyone even while the release itself is a draft.)
 3. One job creates a single **draft pre-release**; the build jobs then add the installers
    and the `talkkeeper-mcp` program for each system to it. Only maintainers can see a draft.
+   When the builds finish, `scripts/rename-release-assets.py` renames the installers to
+   plain-language names (`...-mac-apple-silicon.dmg`, `...-windows-setup.exe`, and so on).
 4. Download and try the installers on real machines, edit the release notes, then press
    **Publish release** when you are happy.
 
