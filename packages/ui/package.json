@@ -23,6 +23,7 @@
     "happy-dom": "^20.0.0"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./ui.css": "./src/ui.css"
   }
 }
