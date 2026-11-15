@@ -1,3 +1,4 @@
+const recordingPreferences = {recording_consent_confirmed:true, meeting_microphone:""};
 let calendarAdded = false;
 const mcpPreferences: Record<string, boolean> = { enabled: false, include_transcripts: false, include_calendar: false };
 let mcpAccess = [{ timestamp: "2026-11-12T10:00:00Z", tool: "search_notes" }];
@@ -115,6 +116,8 @@ mockIPC(async (command, args) => {
     if (a.action === "add") calendarAdded = true;
     return { count: 1 };
   }
+  if (command === "list_input_devices") return ["Built-in microphone", "USB microphone"];
+  if (command === "recording_preferences") { Object.assign(recordingPreferences, a.microphone !== undefined ? {meeting_microphone:a.microphone} : {}, a.consent !== undefined ? {recording_consent_confirmed:a.consent} : {}); return; }
   if (command === "capture_status") return { note_id:captureNote || null,state:captureState,elapsed_ms:captureStarted ? Date.now()-captureStarted : 0 };
   if (["stop_capture","pause_capture","resume_capture"].includes(command)) {
     if (a.noteId !== captureNote) throw new Error("Recording belongs to another note");
@@ -324,7 +327,7 @@ mockIPC(async (command, args) => {
         chat = [];
         return null;
       case "settings":
-        return { provider: "Ollama" };
+        return { provider: "Ollama", ...recordingPreferences };
       case "speech_models":
         return [];
       case "list":

@@ -14,7 +14,7 @@ test("one click opens a note; speech and AI unlock independently and Settings pr
   await expect(page.getByRole("button",{name:"Record",exact:true})).toBeDisabled();
   await page.evaluate(() => (window as unknown as { readySpeech: () => void }).readySpeech());
   await expect(page.getByRole("button",{name:"Record",exact:true})).toBeEnabled();
-  await expect(page.getByRole("button",{name:"Enhance",exact:true})).toBeDisabled();
+  await expect(page.getByRole("button",{name:"Write up my notes",exact:true})).toBeDisabled();
   const card=page.getByRole("region",{name:"Setup status"});
   await expect(card.getByText(/1.4 of 6.8 GB/)).toBeVisible();
   await page.getByRole("button",{name:"Settings",exact:true}).click();
@@ -22,7 +22,7 @@ test("one click opens a note; speech and AI unlock independently and Settings pr
   await page.getByRole("button",{name:"Close",exact:true}).click();
   await expect(card.getByText(/1.4 of 6.8 GB/)).toBeVisible();
   await page.evaluate(() => (window as unknown as { finishSetup: () => void }).finishSetup());
-  await expect(page.getByRole("button",{name:"Enhance",exact:true})).toBeEnabled();
+  await expect(page.getByRole("button",{name:"Write up my notes",exact:true})).toBeEnabled();
 });
 test("network wait and pause are recoverable in the persistent card",async({page})=>{
   await page.goto("/?setup&hold");await page.getByRole("button",{name:"Get started"}).click();

@@ -49,9 +49,10 @@ test("silent microphone guidance opens settings and clears; microphone-only note
     screen.queryByText(/This build records your microphone only/),
   ).toBeNull();
 });
-test("capture stays Starting and prevents double start until the command resolves", async () => {
+test("first recording requires consent and prevents double start until the command resolves", async () => {
   let finish: (() => void) | undefined;
   vi.mocked(invoke).mockImplementation(async (command) => {
+    if (command === "list_input_devices") return ["USB microphone"];
     if (command === "setup_status") return { completed: true, custom: false };
     if (command === "capture_capabilities") return { system_audio: false };
     if (command === "start_capture")
@@ -83,7 +84,16 @@ test("capture stays Starting and prevents double start until the command resolve
   });
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: "New note" }));
+  expect(await screen.findAllByRole("button", {name:"Write up my notes"})).toHaveLength(1);
+  expect(screen.queryByRole("button", {name:/Enhance|Redo/})).toBeNull();
   fireEvent.click(await screen.findByRole("button", { name: "Record" }));
+  await screen.findByRole("dialog", {name:"Before you record"});
+  expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === "start_capture")).toHaveLength(0);
+  fireEvent.click(screen.getByRole("button", {name:"Not yet"}));
+  expect(screen.queryByRole("dialog", {name:"Before you record"})).toBeNull();
+  fireEvent.click(screen.getByRole("button", {name:"Record"}));
+  fireEvent.click(await screen.findByRole("button", {name:"Start recording"}));
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("recording_preferences", {consent:true}));
   const pending = await screen.findByRole("button", { name: "Starting…" });
   expect((pending as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(pending);

@@ -15,6 +15,7 @@ test("attendees become people with history and can start a new note", async ({
   await page.goto("/");
   await page.getByRole("button", { name: "New note", exact: true }).click();
   await page.getByLabel("Note title").fill("Planning together");
+  await page.getByText("Add people", {exact:true}).click();
   await page
     .getByLabel("Attendees", { exact: true })
     .fill("Ada <ada@example.org>");

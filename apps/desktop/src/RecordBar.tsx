@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { data } from "./api";
+import { invoke, type Preferences, data } from "./api";
 import { CaptureFeedback, describeRecordingError } from "./CaptureFeedback";
 export function recordingTime(ms: number) {
   const seconds = Math.floor(ms / 1000);
@@ -113,6 +113,35 @@ export interface RecordBarProps {
   snapshots?: ReactNode;
 }
 export function RecordBar(p: RecordBarProps) {
+  const [devices, setDevices] = useState<string[]>([]);
+  const [microphone, setMicrophone] = useState("");
+  const [deviceMessage, setDeviceMessage] = useState("");
+  useEffect(() => {
+    let mounted = true;
+    void Promise.all([
+      invoke<string[]>("list_input_devices"),
+      data<Preferences>("settings"),
+    ]).then(([available, prefs]) => {
+      if (!mounted) return;
+      setDevices(available);
+      const saved = prefs.meeting_microphone ?? "";
+      setMicrophone(available.includes(saved) ? saved : "");
+      if (saved && !available.includes(saved))
+        setDeviceMessage("Your saved microphone is unavailable. Using the system default microphone.");
+    }).catch(() => {
+      if (mounted) setDeviceMessage("Microphones couldn't be listed. Using the system default microphone.");
+    });
+    return () => { mounted = false; };
+  }, []);
+  async function changeMicrophone(device: string) {
+    try {
+      await invoke("recording_preferences", { microphone: device });
+      setMicrophone(device);
+      setDeviceMessage("");
+    } catch {
+      setDeviceMessage("Your microphone choice couldn't be saved. Try again.");
+    }
+  }
   const [now, setNow] = useState(Date.now());
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [soundTime, setSoundTime] = useState(0);
@@ -265,6 +294,16 @@ export function RecordBar(p: RecordBarProps) {
           </span>{" "}
           {blocked ? "Record" : label}
         </button>
+        {!active && !blocked && p.state === "stopped" && (
+          <label className="meeting-microphone">
+            Microphone
+            <select aria-label="Meeting microphone" value={microphone}
+              onChange={event => void changeMicrophone(event.target.value)}>
+              <option value="">System default</option>
+              {devices.map(device => <option key={device}>{device}</option>)}
+            </select>
+          </label>
+        )}
         {active && !blocked && (
           <>
             <span
@@ -295,7 +334,7 @@ export function RecordBar(p: RecordBarProps) {
           <span role="status" aria-live="polite">
             {sentence}
           </span>
-          {!active && !blocked && p.state === "stopped" && (
+          {!active && !blocked && !p.finished && p.state === "stopped" && (
             <div>
               Tell everyone before you record.{" "}
               <button onClick={p.onCopyNotice}>
@@ -325,6 +364,7 @@ export function RecordBar(p: RecordBarProps) {
           <button onClick={p.onStopDictation}>Stop dictation</button>
         )}
       </div>
+      {deviceMessage && <p role="status">{deviceMessage}</p>}
       {!blocked && (
         <>
           <p className="record-source">

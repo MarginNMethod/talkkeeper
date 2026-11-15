@@ -30,6 +30,7 @@ test("add a private calendar and start linked notes", async ({ page }) => {
   await expect(page.getByLabel("Linked calendar event")).toContainText(
     "Calendar planning",
   );
+  await page.locator(".note-metadata > details > summary").click();
   await expect(page.getByRole("combobox", { name: "Attendees" })).toHaveValue(
     "Alex <alex@example.test>",
   );

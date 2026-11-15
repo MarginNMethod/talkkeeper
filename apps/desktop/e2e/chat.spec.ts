@@ -14,12 +14,10 @@ test("copy transcript, propose a shorter note, apply and undo", async ({
   });
   await page.goto("/");
   await page.getByRole("button", { name: "New note", exact: true }).click();
-  await page.getByRole("button", { name: "Enhance", exact: true }).click();
-  // Wait for the summary to be fully written, not just started.
-  await expect(
-    page.getByRole("button", { name: "Use Redo notes below" }),
-  ).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Edit summary" })).toHaveValue(
+  await page.getByRole("button", { name: "Write up my notes", exact: true }).click();
+  await expect(page.getByRole("button", {name:"Write up my notes",exact:true})).toBeEnabled();
+  await page.getByRole("button", {name:"Edit",exact:true}).click();
+  await expect(page.getByRole("textbox", { name: "Edit written-up notes" })).toHaveValue(
     /Proceed with the garden plan/,
   );
   await page
@@ -29,6 +27,7 @@ test("copy transcript, propose a shorter note, apply and undo", async ({
   await expect(
     page.getByRole("status").filter({ hasText: "Copied 7 words" }),
   ).toBeVisible();
+  await page.getByText("Ask about this note", {exact:true}).click();
   const chat = page.getByRole("region", { name: "Chat with this note" });
   await chat
     .getByLabel("Message", { exact: true })
@@ -37,15 +36,15 @@ test("copy transcript, propose a shorter note, apply and undo", async ({
   await expect(
     chat.getByRole("heading", { name: "Proposed revision" }),
   ).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Edit summary" })).toHaveValue(
+  await expect(page.getByRole("textbox", { name: "Edit written-up notes" })).toHaveValue(
     /Proceed with the garden plan/,
   );
   await chat.getByRole("button", { name: "Apply", exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "Edit summary" })).toHaveValue(
+  await expect(page.getByRole("textbox", { name: "Edit written-up notes" })).toHaveValue(
     "Garden plan [#12]",
   );
   await chat.getByRole("button", { name: "Undo", exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "Edit summary" })).toHaveValue(
+  await expect(page.getByRole("textbox", { name: "Edit written-up notes" })).toHaveValue(
     /Proceed with the garden plan/,
   );
 });

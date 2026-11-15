@@ -51,8 +51,7 @@ export function Chat({
     redo: boolean;
     edit: boolean;
   } | null>(null);
-  const [revision, setRevision] = useState(false),
-    [instructions, setInstructions] = useState("");
+  const [revision, setRevision] = useState(false);
   async function reload() {
     setMessages((await data<Message[]>("chat_history", { id: note.id })) ?? []);
     setVersions((await data<Version[]>("versions", { id: note.id })) ?? []);
@@ -272,29 +271,7 @@ export function Chat({
           </>
         )}
       </section>
-      <section aria-label="Redo enhanced notes">
-        <h2>Redo enhanced notes</h2>
-        <label>
-          Extra instructions
-          <input
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-          />
-        </label>
-        <button
-          disabled={busy || locked || !segments.length}
-          onClick={() =>
-            void ask(
-              instructions ||
-                "Redo the notes using the selected source material",
-              true,
-              true,
-            )
-          }
-        >
-          Redo notes
-        </button>
-      </section>
+
     </>
   );
 }

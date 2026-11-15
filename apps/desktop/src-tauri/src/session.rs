@@ -8,6 +8,50 @@ pub fn cancel_model_download() {
     DOWNLOAD_CANCEL.notify_waiters();
 }
 
+#[tauri::command]
+pub fn list_input_devices() -> Result<Vec<String>> {
+    talkkeeper_audio::list_input_devices().map_err(err)
+}
+
+#[tauri::command]
+pub fn recording_preferences(
+    state: tauri::State<'_, AppState>,
+    microphone: Option<String>,
+    consent: Option<bool>,
+) -> Result<()> {
+    let mut store = state.store.lock().map_err(err)?;
+    let mut prefs = preferences(&store)?;
+    if let Some(device) = microphone {
+        prefs["meeting_microphone"] = json!(device);
+    }
+    if let Some(confirmed) = consent {
+        prefs["recording_consent_confirmed"] = json!(confirmed);
+    }
+    store.set_setting("preferences", &prefs).map_err(err)
+}
+
+fn select_microphone(saved: Option<&str>, devices: &[String]) -> Option<String> {
+    saved
+        .filter(|name| !name.is_empty() && devices.iter().any(|d| d == name))
+        .map(str::to_owned)
+}
+
+#[cfg(test)]
+mod microphone_tests {
+    use super::select_microphone;
+    #[test]
+    fn selects_saved_device_or_system_default() {
+        let devices = vec!["USB microphone".to_owned()];
+        assert_eq!(
+            select_microphone(Some("USB microphone"), &devices),
+            Some("USB microphone".into())
+        );
+        assert_eq!(select_microphone(Some("Disconnected"), &devices), None);
+        assert_eq!(select_microphone(Some(""), &devices), None);
+        assert_eq!(select_microphone(None, &devices), None);
+    }
+}
+
 pub struct ActiveCapture {
     sender: tokio::sync::mpsc::Sender<String>,
     note_id: Uuid,
@@ -148,9 +192,11 @@ async fn prepare_capture(
     if rx.try_recv().is_ok() {
         return Err("Recording cancelled".into());
     }
-    let capture = tokio::task::spawn_blocking(|| {
+    let devices = talkkeeper_audio::list_input_devices().map_err(err)?;
+    let mic_device = select_microphone(prefs["meeting_microphone"].as_str(), &devices);
+    let capture = tokio::task::spawn_blocking(move || {
         Capture::start(CaptureConfig {
-            mic_device: None,
+            mic_device,
             capture_system: talkkeeper_audio::SYSTEM_AUDIO_AVAILABLE,
         })
     })

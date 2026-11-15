@@ -19,8 +19,9 @@ test("create, write, enhance, search and export a note", async ({ page }) => {
   await page
     .getByRole("textbox", { name: "Rough notes" })
     .fill("Discuss the garden plan");
-  await page.getByRole("button", { name: "Enhance", exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "Edit summary" })).toHaveValue(
+  await page.getByRole("button", { name: "Write up my notes", exact: true }).click();
+  await page.getByRole("button", {name:"Edit",exact:true}).click();
+  await expect(page.getByRole("textbox", { name: "Edit written-up notes" })).toHaveValue(
     /Proceed with the garden plan/,
   );
   await page
@@ -29,7 +30,7 @@ test("create, write, enhance, search and export a note", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: /Garden conversation/ }),
   ).toBeVisible();
-  await page.getByText("Export", { exact: true }).click();
+  await page.getByText("More actions", { exact: true }).click();
   await page
     .getByRole("button", { name: "Export Markdown", exact: true })
     .click();
