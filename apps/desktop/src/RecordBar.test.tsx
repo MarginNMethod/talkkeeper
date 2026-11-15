@@ -51,8 +51,8 @@ test.each([
   ["stopped", true, "Record more", "start_capture"],
   ["recording", false, "Stop", "stop_capture"],
   ["paused", false, "Resume", "resume_capture"],
-  ["starting", false, "Starting…", null],
-  ["finishing", false, "Finishing…", null],
+  ["starting", false, "Starting…", "stop_capture"],
+  ["finishing", false, "Finishing…", "stop_capture"],
 ])("record state %s transcript %s", (state, hasTranscript, name, command) => {
   render(<RecordBar {...base} state={state} hasTranscript={hasTranscript} />);
   const button = screen.getByRole("button", { name }) as HTMLButtonElement;
@@ -260,11 +260,11 @@ test("meter peaks fall even while quieter frames continue arriving", () => {
   expect(view.container.querySelectorAll(".level-bars .lit")).toHaveLength(0);
 });
 
-test("missing saved microphone uses system default and explains the fallback", async () => {
+test("missing saved microphone uses automatic selection and explains the fallback", async () => {
   vi.mocked(data).mockResolvedValueOnce({meeting_microphone:"Old headset"});
-  vi.mocked(invoke).mockResolvedValueOnce(["USB microphone"]);
+  vi.mocked(invoke).mockImplementation(async (command) => command === "list_input_devices" ? ["USB microphone"] : null as never);
   render(<RecordBar {...base} />);
-  await screen.findByText("Your saved microphone is unavailable. Using the system default microphone.");
+  await screen.findByText("Your saved microphone is unavailable. Using automatic microphone selection.");
   expect((screen.getByLabelText("Meeting microphone") as HTMLSelectElement).value).toBe("");
   fireEvent.change(screen.getByLabelText("Meeting microphone"), {target:{value:"USB microphone"}});
   await waitFor(() => expect(invoke).toHaveBeenCalledWith("recording_preferences", {microphone:"USB microphone"}));
@@ -275,4 +275,18 @@ test("consent reminder disappears when a take stops", () => {
   expect(screen.getByText(/Tell everyone before you record/)).toBeTruthy();
   view.rerender(<RecordBar {...base} finished />);
   expect(screen.queryByText(/Tell everyone before you record/)).toBeNull();
+});
+
+test("starting can be cancelled and microphone remains visible", () => {
+  render(<RecordBar {...base} state="starting" />);
+  const cancel = screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement;
+  expect(cancel.disabled).toBe(false);
+  fireEvent.click(cancel);
+  expect(base.onCommand).toHaveBeenCalledWith("stop_capture");
+  expect(screen.getByRole("combobox", { name: "Meeting microphone" })).toBeTruthy();
+});
+test("recording shows the selected microphone", async () => {
+  vi.mocked(invoke).mockImplementation(async (command) => command === "current_microphone" ? "MacBook Microphone" : [] as never);
+  render(<RecordBar {...base} state="recording" />);
+  await screen.findByText("Using: MacBook Microphone");
 });

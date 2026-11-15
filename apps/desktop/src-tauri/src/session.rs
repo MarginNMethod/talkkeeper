@@ -30,31 +30,10 @@ pub fn recording_preferences(
     store.set_setting("preferences", &prefs).map_err(err)
 }
 
-fn select_microphone(saved: Option<&str>, devices: &[String]) -> Option<String> {
-    saved
-        .filter(|name| !name.is_empty() && devices.iter().any(|d| d == name))
-        .map(str::to_owned)
-}
-
-#[cfg(test)]
-mod microphone_tests {
-    use super::select_microphone;
-    #[test]
-    fn selects_saved_device_or_system_default() {
-        let devices = vec!["USB microphone".to_owned()];
-        assert_eq!(
-            select_microphone(Some("USB microphone"), &devices),
-            Some("USB microphone".into())
-        );
-        assert_eq!(select_microphone(Some("Disconnected"), &devices), None);
-        assert_eq!(select_microphone(Some(""), &devices), None);
-        assert_eq!(select_microphone(None, &devices), None);
-    }
-}
-
 pub struct ActiveCapture {
     sender: tokio::sync::mpsc::Sender<String>,
     note_id: Uuid,
+    microphone: Option<String>,
     state: &'static str,
     elapsed: std::time::Duration,
     since: std::time::Instant,
@@ -84,7 +63,7 @@ impl ActiveCapture {
 fn status_value(active: Option<&ActiveCapture>) -> Value {
     match active {
         Some(active) => {
-            json!({"note_id":active.note_id,"state":active.state,"elapsed_ms":active.elapsed_ms()})
+            json!({"note_id":active.note_id,"state":active.state,"elapsed_ms":active.elapsed_ms(),"microphone":active.microphone})
         }
         None => json!({"note_id":null,"state":"stopped","elapsed_ms":0}),
     }
@@ -95,6 +74,14 @@ pub fn capture_status(state: tauri::State<'_, AppState>) -> Result<Value> {
 }
 fn transition(app: &tauri::AppHandle, status: &'static str) -> Result<()> {
     let state = app.state::<AppState>();
+    if let Ok(mut diagnostics) = state.recording_diagnostics.lock() {
+        diagnostics
+            .events
+            .push_back(format!("{}: {status}", chrono::Utc::now()));
+        while diagnostics.events.len() > 50 {
+            diagnostics.events.pop_front();
+        }
+    }
     let mut active = state.capture.lock().map_err(err)?;
     if let Some(active) = active.as_mut() {
         active.transition(status);
@@ -160,17 +147,34 @@ pub async fn start_capture(
         }
         *active = Some(ActiveCapture {
             sender: tx,
+            microphone: None,
             note_id,
             state: "starting",
             elapsed: std::time::Duration::ZERO,
             since: std::time::Instant::now(),
         });
     }
-    let result = prepare_capture(app, &state, note_id, prefs, rx)
+    let result = prepare_capture(app.clone(), &state, note_id, prefs, rx)
         .await
-        .map_err(|error| format!("Could not start recording: {error}"));
+        .map_err(|error| {
+            if error == "Recording cancelled" {
+                error
+            } else {
+                format!("Could not start recording: {error}")
+            }
+        });
     if result.is_err() {
         *state.capture.lock().map_err(err)? = None;
+        if let Err(error) = &result {
+            if error != "Recording cancelled" {
+                remember_error(&state, error);
+            }
+        }
+        app.emit(
+            "capture://state",
+            json!({"note_id":note_id,"state":"stopped","elapsed_ms":0,"cancelled":true}),
+        )
+        .map_err(err)?;
     }
     result
 }
@@ -182,25 +186,39 @@ async fn prepare_capture(
     prefs: Value,
     mut rx: tokio::sync::mpsc::Receiver<String>,
 ) -> Result<()> {
-    tokio::task::spawn_blocking(talkkeeper_audio::authorize_microphone)
-        .await
-        .map_err(err)?
-        .map_err(err)?;
-    let engine = speech_engine(state, &prefs).await?;
-    let mut stt = begin_transcription(engine.as_ref(), &prefs).await?;
-    let events = stt.events().ok_or("STT events unavailable")?;
-    if rx.try_recv().is_ok() {
-        return Err("Recording cancelled".into());
+    macro_rules! cancellable {
+        ($future:expr) => {
+            tokio::select! {
+                biased;
+                _ = rx.recv() => return Err("Recording cancelled".into()),
+                result = $future => result,
+            }
+        };
     }
-    let devices = talkkeeper_audio::list_input_devices().map_err(err)?;
-    let mic_device = select_microphone(prefs["meeting_microphone"].as_str(), &devices);
-    let capture = tokio::task::spawn_blocking(move || {
+    cancellable!(tokio::task::spawn_blocking(
+        talkkeeper_audio::authorize_microphone
+    ))
+    .map_err(err)?
+    .map_err(err)?;
+    let engine = cancellable!(speech_engine(state, &prefs))?;
+    let mut stt = cancellable!(begin_transcription(engine.as_ref(), &prefs))?;
+    let events = stt.events().ok_or("STT events unavailable")?;
+    let mic_device = cancellable!(tokio::task::spawn_blocking(move || {
+        talkkeeper_audio::selected_input_device(prefs["meeting_microphone"].as_str())
+    }))
+    .map_err(err)?
+    .map_err(err)?;
+    if let Some(active) = state.capture.lock().map_err(err)?.as_mut() {
+        active.microphone = mic_device.clone();
+    }
+    transition(&app, "starting")?;
+    // Dropping the join future on cancel drops any eventual handle, stopping its stream.
+    let capture = cancellable!(tokio::task::spawn_blocking(move || {
         Capture::start(CaptureConfig {
             mic_device,
             capture_system: talkkeeper_audio::SYSTEM_AUDIO_AVAILABLE,
         })
-    })
-    .await
+    }))
     .map_err(err)?
     .map_err(err)?;
     {
@@ -361,17 +379,31 @@ async fn run_capture(
     }
     let _ = transition(&app, "finishing");
     capture.stop();
-    let finish = stt.finish().await.map_err(err);
-    let drain = match output_result {
-        Some(result) => result,
-        None => output.await.map_err(err).and_then(|r| r),
+    let finalize = async {
+        let finish = stt.finish().await.map_err(err);
+        let drain = match output_result {
+            Some(result) => result,
+            None => (&mut output).await.map_err(err).and_then(|r| r),
+        };
+        // The decoder error explains a closed input queue; preserve it first.
+        drain.and(result).and(finish)
     };
-    // The decoder error explains a closed input queue; preserve it first.
-    let result = drain.and(result).and(finish);
+    let result = tokio::select! {
+        biased;
+        _ = rx.recv() => Ok(()),
+        result = finalize => result,
+        _ = tokio::time::sleep(std::time::Duration::from_secs(8)) => {
+            Err("Speech recognition did not finish in time".into())
+        }
+    };
+    output.abort();
     if result.is_err() {
         notify_recording(&app, note_id, false);
     }
     let state = app.state::<AppState>();
+    if let Err(error) = &result {
+        remember_error(&state, error);
+    }
     let elapsed_ms = state
         .capture
         .lock()
@@ -668,6 +700,7 @@ mod tests {
         let (sender, mut rx) = tokio::sync::mpsc::channel(8);
         let id = Uuid::new_v4();
         let mut active = ActiveCapture {
+            microphone: None,
             sender,
             note_id: id,
             state: "recording",
@@ -807,5 +840,163 @@ mod tests {
                 expected
             );
         }
+    }
+}
+
+// Recording diagnostics deliberately never read notes, transcripts, or provider credentials.
+#[derive(Default)]
+pub(super) struct RecordingDiagnostics {
+    last_error: Option<String>,
+    events: std::collections::VecDeque<String>,
+}
+fn safe_error(error: &str) -> String {
+    // Provider errors can echo submitted text, URLs, or credentials. Only export
+    // recognized categories; keep the original error in the UI for the user.
+    let lower = error.to_lowercase();
+    for (needle, category) in [
+        ("microphone", "Microphone error"),
+        ("permission", "Permission error"),
+        ("model", "Speech model error"),
+        ("overflow", "Audio queue overflow"),
+        ("speech", "Speech recognition error"),
+    ] {
+        if lower.contains(needle) {
+            return category.into();
+        }
+    }
+    "Recording failed (details withheld for privacy)".into()
+}
+fn remember_error(state: &AppState, error: &str) {
+    if let Ok(mut diagnostics) = state.recording_diagnostics.lock() {
+        diagnostics.last_error = Some(error.to_owned());
+    }
+}
+#[tauri::command]
+pub fn current_microphone(state: tauri::State<'_, AppState>) -> Result<Option<String>> {
+    resolve_microphone(&state)
+}
+fn resolve_microphone(state: &AppState) -> Result<Option<String>> {
+    if let Some(active) = state.capture.lock().map_err(err)?.as_ref() {
+        if active.microphone.is_some() {
+            return Ok(active.microphone.clone());
+        }
+    }
+    let prefs = preferences(&*state.store.lock().map_err(err)?)?;
+    talkkeeper_audio::selected_input_device(prefs["meeting_microphone"].as_str()).map_err(err)
+}
+#[tauri::command]
+pub fn diagnostics_report(state: tauri::State<'_, AppState>) -> Result<String> {
+    diagnostics_report_inner(&state)
+}
+fn diagnostics_report_inner(state: &AppState) -> Result<String> {
+    let prefs = preferences(&*state.store.lock().map_err(err)?)?;
+    let selected = resolve_microphone(state).unwrap_or_default();
+    let devices = talkkeeper_audio::list_input_devices().unwrap_or_default();
+    let default = talkkeeper_audio::default_input_device();
+    let permission = talkkeeper_audio::permissions_status();
+    let model = prefs["stt_model"].as_str().unwrap_or("unset");
+    let catalog = talkkeeper_transcribe::models::MODELS
+        .iter()
+        .find(|m| m.name == model);
+    let model_description = catalog
+        .map(|m| format!("{} ({} bytes)", m.name, m.size))
+        .unwrap_or_else(|| "Custom or unset model (name withheld for privacy)".into());
+    let os_version = std::process::Command::new(if cfg!(target_os = "windows") {
+        "cmd"
+    } else {
+        "uname"
+    })
+    .args(if cfg!(target_os = "windows") {
+        vec!["/C", "ver"]
+    } else {
+        vec!["-sr"]
+    })
+    .output()
+    .ok()
+    .filter(|o| o.status.success())
+    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+    .unwrap_or_else(|| "unavailable".into());
+    let diagnostics = state.recording_diagnostics.lock().map_err(err)?;
+    Ok(format!(
+        "TalkKeeper {}
+OS: {} {}
+CPU: {}
+Microphone permission guidance: {}
+Input devices: {}
+Selected: {}
+System default: {}
+Speech engine: {}
+Model: {}
+Last recording error: {}
+Recent recording events (up to 50):
+{}
+",
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::OS,
+        os_version,
+        std::env::consts::ARCH,
+        permission.microphone,
+        devices.join(", "),
+        selected.as_deref().unwrap_or("unavailable"),
+        default.as_deref().unwrap_or("unavailable"),
+        if prefs["stt_engine"].as_str().unwrap_or("local") == "local" {
+            "local"
+        } else {
+            "cloud"
+        },
+        model_description,
+        diagnostics
+            .last_error
+            .as_deref()
+            .map(safe_error)
+            .unwrap_or_else(|| "none".into()),
+        diagnostics
+            .events
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    ))
+}
+#[cfg(test)]
+mod diagnostics_tests {
+    use super::*;
+    #[test]
+    fn report_never_exports_note_content_or_provider_details() {
+        let state = crate::tests::state();
+        let private = "private transcript sentence";
+        state
+            .store
+            .lock()
+            .unwrap()
+            .set_setting(
+                "preferences",
+                &json!({
+                    "stt_url": "https://provider.example/?token=secret",
+                    "stt_model": private,
+                    "vocabulary": [private]
+                }),
+            )
+            .unwrap();
+        remember_error(
+            &state,
+            &format!("Provider returned: {private} sk-secret https://example/?token=secret"),
+        );
+        let report = diagnostics_report_inner(&state).unwrap();
+        assert!(report.contains("TalkKeeper"));
+        assert!(!report.contains(private));
+        assert!(!report.contains("secret"));
+        assert!(!report.contains("https://"));
+    }
+    #[test]
+    fn errors_never_export_transcripts_or_secrets() {
+        let private =
+            "private transcript sentence https://provider.example/?token=secret sk-secret";
+        assert!(!safe_error(private).contains("private transcript"));
+        assert!(!safe_error(private).contains("secret"));
+        assert_eq!(
+            safe_error(&format!("microphone: {private}")),
+            "Microphone error"
+        );
     }
 }

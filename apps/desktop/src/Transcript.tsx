@@ -1,3 +1,4 @@
+import { CopyDiagnostics } from "./CopyDiagnostics";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Segment } from "./api";
@@ -113,6 +114,7 @@ export function Transcript({
           ) : finished ? (
             <>
               <strong>No words were picked up</strong>
+              <CopyDiagnostics />
               <p>
                 The recording ran for {recordedDuration(elapsed)} but no speech
                 was recognised. Check your microphone, then try again.

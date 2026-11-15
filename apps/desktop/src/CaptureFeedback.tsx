@@ -1,3 +1,4 @@
+import { CopyDiagnostics } from "./CopyDiagnostics";
 import { invoke } from "./api";
 export function MicrophoneSettingsButton({
   onError,
@@ -129,6 +130,7 @@ export function CaptureFeedback({
       )}
       {warning && (
         <div role={warning === "long_silence" ? "status" : "alert"} className="record-warning">
+          <CopyDiagnostics />
           {warning === "mic_silent" && (
             <>
               <strong>We can't hear anything</strong>

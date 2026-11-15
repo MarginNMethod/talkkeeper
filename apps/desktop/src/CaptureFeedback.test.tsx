@@ -95,9 +95,10 @@ test("first recording requires consent and prevents double start until the comma
   fireEvent.click(await screen.findByRole("button", {name:"Start recording"}));
   await waitFor(() => expect(invoke).toHaveBeenCalledWith("recording_preferences", {consent:true}));
   const pending = await screen.findByRole("button", { name: "Starting…" });
-  expect((pending as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.click(pending);
+  expect((pending as HTMLButtonElement).disabled).toBe(false);
   await waitFor(() => expect(finish).toBeTruthy());
+  fireEvent.click(pending);
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("stop_capture", { noteId: note.id }));
   expect(
     vi
       .mocked(invoke)
