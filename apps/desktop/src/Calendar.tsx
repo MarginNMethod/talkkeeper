@@ -10,6 +10,11 @@ export interface CalendarEvent {
   attendees: { name: string; email: string }[];
   meeting_url: string | null;
 }
+export const openCalendarNote = (event: CalendarEvent) => data<Note>("calendar_start", { event });
+export function calendarTimeRange(event: CalendarEvent) {
+  const time = (date: string) => new Date(date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return event.all_day ? "All day" : `${time(event.instance_start)} – ${time(event.instance_end)}`;
+}
 interface Entry {
   event: CalendarEvent;
   note_id: string | null;
@@ -248,6 +253,26 @@ export function CalendarSettings({
     </section>
   );
 }
+export function useCalendarEntries(onError: (e: unknown) => void) {
+  const [entries, setEntries] = useState<Entry[]>([]),
+    [now, setNow] = useState(Date.now());
+  const errorHandler = useRef(onError);
+  errorHandler.current = onError;
+  useEffect(() => {
+    let active = true;
+    const load = () =>
+      void data<Entry[]>("calendar_events")
+        .then((e) => { if (active) setEntries(e ?? []); })
+        .catch(error => { if (active) errorHandler.current(error); });
+    load();
+    const timer = setInterval(() => {
+      setNow(Date.now());
+      load();
+    }, 60000);
+    return () => { active = false; clearInterval(timer); };
+  }, []);
+  return { entries, now };
+}
 export function Agenda({
   onOpen,
   onError,
@@ -255,20 +280,7 @@ export function Agenda({
   onOpen: (n: Note) => void;
   onError: (e: unknown) => void;
 }) {
-  const [entries, setEntries] = useState<Entry[]>([]),
-    [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const load = () =>
-      void data<Entry[]>("calendar_events")
-        .then((e) => setEntries(e ?? []))
-        .catch(onError);
-    load();
-    const timer = setInterval(() => {
-      setNow(Date.now());
-      load();
-    }, 60000);
-    return () => clearInterval(timer);
-  }, []);
+  const { entries, now } = useCalendarEntries(onError);
   const groups = new Map<string, Entry[]>();
   for (const entry of entries) {
     if (
@@ -290,9 +302,7 @@ export function Agenda({
             .map(({ event: e, note_id }) => (
               <article key={`${e.source_id}/${e.uid}/${e.instance_start}`}>
                 <p>
-                  {e.all_day
-                    ? "All day"
-                    : `${new Date(e.instance_start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} – ${new Date(e.instance_end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+                  {calendarTimeRange(e)}
                 </p>
                 <strong>{e.title}</strong>
                 <p>{e.attendees.length} attendees</p>
@@ -308,7 +318,7 @@ export function Agenda({
                 )}
                 <button
                   onClick={() =>
-                    void data<Note>("calendar_start", { event: e })
+                    void openCalendarNote(e)
                       .then(onOpen)
                       .catch(onError)
                   }
@@ -462,7 +472,7 @@ export function CalendarAutoCapture({
         if (!entry || latest.current.active) return;
         const e = entry.event;
         seen.add(`${e.source_id}/${e.uid}/${e.instance_start}`);
-        const note = await data<Note>("calendar_start", { event: e });
+        const note = await openCalendarNote(e);
         await latest.current.onOpen(note);
         await latest.current.onRecord(note.id);
       } catch (e) {

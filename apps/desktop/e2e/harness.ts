@@ -2,7 +2,7 @@ const recordingPreferences = {
   recording_consent_confirmed: true,
   meeting_microphone: "",
 };
-let calendarAdded = false;
+let calendarAdded = new URLSearchParams(location.search).has("shell");
 const mcpPreferences: Record<string, boolean> = {
   enabled: false,
   include_transcripts: false,
@@ -12,7 +12,9 @@ let mcpAccess = [{ timestamp: "2026-11-12T10:00:00Z", tool: "search_notes" }];
 import { mockIPC } from "@tauri-apps/api/mocks";
 let chat: Record<string, unknown>[] = [];
 let versions: Record<string, unknown>[] = [];
-let notes: Record<string, unknown>[] = [];
+const shellSeed = new URLSearchParams(location.search).has("shell");
+let folders: {id: string; name: string}[] = shellSeed ? [{id:"space-1",name:"Product conversations"}] : [];
+let notes: Record<string, unknown>[] = shellSeed ? ["Planning the next chapter", "A few ideas to follow up", "Weekly team conversation"].map((title,i) => ({ id: `seed-${i}`, title, created_at: new Date(Date.now()-i*86400000).toISOString(), updated_at: new Date().toISOString(), notes_markdown: ["A shared direction for the next release.", "Make room for a quieter, more useful workspace.", "Decisions, questions, and the next small steps."][i], notes_doc: null, summary_markdown: null, template_id: null, folder_id: i === 1 ? null : "space-1", attendees: i === 0 ? [{name:"Alex Rivera",email:"alex@example.test"}] : [], deleted_at: null })) : [];
 let chats: Record<string, unknown>[] = [];
 const recipes = [
   {
@@ -412,7 +414,7 @@ mockIPC(async (command, args) => {
         return [];
       case "calendar_events":
         return calendarAdded
-          ? structuredClone([{ event: calendarEvent, note_id: null }])
+          ? structuredClone([{ event: calendarEvent, note_id: null }, ...(shellSeed ? [{ event: {...calendarEvent, uid: "tomorrow", title: "Design check-in", instance_start: new Date(Date.now() + 86400000).toISOString(), instance_end: new Date(Date.now() + 90000000).toISOString()}, note_id: null }] : [])])
           : [];
       case "calendar_note":
         return notes.find((n) => n.id === p.id)?.title === "Calendar planning"
@@ -546,7 +548,16 @@ mockIPC(async (command, args) => {
       case "templates":
         return [{ id: "auto", name: "Auto" }];
       case "folders":
-        return [];
+        return structuredClone(folders);
+      case "save_folder": {
+        const folder = p.folder as {id: string; name: string};
+        folders = p.update ? folders.map(f => f.id === folder.id ? folder : f) : [...folders,folder];
+        return;
+      }
+      case "delete_folder":
+        folders = folders.filter(f => f.id !== p.id);
+        notes = notes.map(n => n.folder_id === p.id ? {...n,folder_id:null} : n);
+        return;
       case "segments":
         if (recordingTest)
           return structuredClone(recordingLines[String(p.id)] ?? []);
@@ -592,7 +603,7 @@ mockIPC(async (command, args) => {
       case "search":
         return structuredClone(
           notes
-            .filter((n) => String(n.notes_markdown).includes(String(p.query)))
+            .filter((n) => `${n.title} ${n.notes_markdown}`.toLowerCase().includes(String(p.query).toLowerCase()))
             .map((note) => ({ note, snippet: "garden plan" })),
         );
       case "export":

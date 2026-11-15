@@ -20,9 +20,12 @@ if (process.env.SHOTS === "1") {
         await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
         await page.screenshot({ path: `e2e/screenshots/${theme}-${name}.png`, fullPage: true });
       };
-      await page.goto("/");
+      await page.goto("/?shell");
       await expect(page.getByRole("button", { name: "New note", exact: true })).toBeVisible();
       await shot("home");
+      await page.getByRole("button", {name:"Product conversations",exact:true}).click();
+      await expect(page.getByRole("heading", {name:"Product conversations",exact:true})).toBeVisible();
+      await shot("space");
       for (const name of ["Today", "People", "Companies"]) {
         const nav = page.getByRole("button", { name, exact: true });
         // People and Companies only appear once the mock data has some.

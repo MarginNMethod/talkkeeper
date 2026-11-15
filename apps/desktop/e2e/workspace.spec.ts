@@ -26,12 +26,14 @@ test("create, write, enhance, search and export a note", async ({ page }) => {
   await expect(
     page.getByRole("textbox", { name: "Edit written-up notes" }),
   ).toHaveValue(/Proceed with the garden plan/);
+  await page.keyboard.press("Control+k");
   await page
     .getByRole("textbox", { name: "Search notes", exact: true })
     .fill("garden");
   await expect(
     page.getByRole("button", { name: /Garden conversation/ }),
   ).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.getByText("More actions", { exact: true }).click();
   await page
     .getByRole("button", { name: "Notes and summary", exact: true })

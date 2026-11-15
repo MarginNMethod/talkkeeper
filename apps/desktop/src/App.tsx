@@ -1,6 +1,11 @@
 import { RecordingConsent } from "./RecordingConsent";
 import { NoteWorkspace } from "./NoteWorkspace";
-import { SidebarIcon } from "./SidebarIcon";
+import { Sidebar, type View } from "./Sidebar";
+import { TopBar } from "./TopBar";
+import { Home } from "./Home";
+import { SpacePage } from "./SpacePage";
+import { NotesList } from "./NotesList";
+import { SearchPalette } from "./SearchPalette";
 import {
   Agenda,
   CalendarLink,
@@ -34,9 +39,7 @@ import { Summary } from "./Summary";
 export function App() {
   const [notes, setNotes] = useState<Note[]>([]),
     [note, setNote] = useState<Note | null>(null),
-    [query, setQuery] = useState(""),
-    [trash, setTrash] = useState(false),
-    [snippets, setSnippets] = useState<Record<string, string>>({}),
+
     [segments, setSegments] = useState<Segment[]>([]),
     [templates, setTemplates] = useState<Template[]>([]),
     [template, setTemplate] = useState("auto"),
@@ -70,7 +73,7 @@ export function App() {
     [autoStop, setAutoStop] = useState(false),
     [enhancing, setEnhancing] = useState(false),
     [folders, setFolders] = useState<{ id: string; name: string }[]>([]),
-    [folder, setFolder] = useState(""),
+
     [download, setDownload] = useState<{
       percent: number;
       done: string;
@@ -79,21 +82,65 @@ export function App() {
     } | null>(null),
     [downloadReady, setDownloadReady] = useState(false),
     [progress, setProgress] = useState("");
-  const [directory, setDirectory] = useState<"people" | "companies" | null>(
-    null,
-  );
+  const [view, setView] = useState<View>({kind: "home"});
+  const trash = view.kind === "trash" || (view.kind === "note" && !!note?.deleted_at);
+  const directory = view.kind === "people" || view.kind === "companies" ? view.kind : null;
+  const agenda = view.kind === "today";
+  const workspaceChat = view.kind === "chat";
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [initialQuestion, setInitialQuestion] = useState("");
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return window.innerWidth < 900 || localStorage.getItem("tk-sidebar-collapsed") === "true";
+    } catch {
+      return window.innerWidth < 900;
+    }
+  });
+  function toggleSidebar() {
+    setCollapsed(value => {
+      try { localStorage.setItem("tk-sidebar-collapsed", String(!value)); }
+      catch { /* Navigation still works when storage is unavailable. */ }
+      return !value;
+    });
+  }
+  useEffect(() => {
+    const compact = window.matchMedia("(max-width: 899px)");
+    const resize = () => { if (compact.matches) setCollapsed(true); };
+    compact.addEventListener("change", resize);
+    return () => compact.removeEventListener("change", resize);
+  }, []);
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen(value => !value);
+      }
+    };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, []);
+  const previousView = useRef<View>({kind: "home"});
+  async function navigate(next: View, question = "") {
+    await flush();
+    setSetupChoice(true);
+    setPersonId(undefined);
+    if (next.kind === "settings") {
+      if (view.kind !== "settings") previousView.current = view;
+      setSettings(await data<Preferences>("settings"));
+    } else {
+      setSettings(null);
+      if (next.kind === "chat") setInitialQuestion(question);
+    }
+    setView(next);
+  }
+  const openSettings = (prefs: Preferences) => {
+    if (view.kind !== "settings") previousView.current = view;
+    setSettings(prefs);
+    setView({kind: "settings"});
+  };
   const [pendingAction, setPendingAction] = useState<"stop" | "purge" | null>(
     null,
   );
-  const [folderEdit, setFolderEdit] = useState<{
-    id: string;
-    name: string;
-    existing: boolean;
-  } | null>(null);
-  const [deleteFolder, setDeleteFolder] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
   const [directoryCounts, setDirectoryCounts] = useState({
     people: 0,
     companies: 0,
@@ -106,29 +153,6 @@ export function App() {
         )
         .catch(() => {});
   }, [notes]);
-  function noteGroup(date: string) {
-    const day = new Date(date),
-      today = new Date();
-    const age = Math.floor(
-      (new Date(
-        today.getFullYear(),
-        today.getMonth(),
-        today.getDate(),
-      ).getTime() -
-        new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime()) /
-        86400000,
-    );
-    return age === 0
-      ? "Today"
-      : age === 1
-        ? "Yesterday"
-        : age < 7
-          ? "Earlier this week"
-          : day.toLocaleDateString(undefined, {
-              month: "long",
-              year: "numeric",
-            });
-  }
   const startPending = useRef(false);
   const startCancelled = useRef(false);
   const startInvoked = useRef(false);
@@ -183,9 +207,7 @@ export function App() {
       .then((c) => setSystemAudio(c.system_audio))
       .catch(fail);
   }, []);
-  const [agenda, setAgenda] = useState(false);
   const [personId, setPersonId] = useState<string | undefined>();
-  const [workspaceChat, setWorkspaceChat] = useState(false);
   const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
   const [citationSeq, setCitationSeq] = useState<number | null>(null);
   useEffect(() => {
@@ -231,28 +253,17 @@ export function App() {
     saveQueue = useRef(Promise.resolve());
   current.current = note;
   visibleNote.current =
-    !settings && !agenda && !directory && !workspaceChat
+    view.kind === "note"
       ? (note?.id ?? null)
       : null;
   const fail = (e: unknown) => setError(String(e));
   const recordError = recordErrors[note?.id ?? ""] ?? "";
   const setRecordError = (text: string, id = current.current?.id ?? "") =>
     setRecordErrors((errors) => ({ ...errors, [id]: text }));
-  async function refresh() {
-    if (query) {
-      const hits = await data<{ note: Note; snippet: string }[]>("search", {
-        query,
-      });
-      setNotes(hits.map((h) => h.note));
-      setSnippets(Object.fromEntries(hits.map((h) => [h.note.id, h.snippet])));
-    } else {
-      setNotes(await data<Note[]>(trash ? "trash" : "list"));
-      setSnippets({});
-    }
-  }
+  async function refresh() { setNotes((await data<Note[]>(trash ? "trash" : "list")) ?? []); }
   useEffect(() => {
     void refresh().catch(fail);
-  }, [query, trash]);
+  }, [trash]);
   useEffect(() => {
     void data<Template[]>("templates").then(setTemplates).catch(fail);
     void data<{ id: string; name: string }[]>("folders")
@@ -416,11 +427,9 @@ export function App() {
 
   async function select(n: Note) {
     setSettings(null);
-    setAgenda(false);
     await flush();
-    setDirectory(null);
-    setWorkspaceChat(false);
     const lines = await data<Segment[]>("segments", { id: n.id });
+    setView({kind:"note"});
     setNote(n);
     setTemplate(n.template_id ?? "auto");
     setSegments(lines);
@@ -442,6 +451,10 @@ export function App() {
   async function create(firstRun = false) {
     await flush();
     const n = await data<Note>("start_note", {});
+    if (view.kind === "space" && view.folder) {
+      n.folder_id = view.folder;
+      await data("update", n);
+    }
     if (firstRun || n.title === "Untitled conversation") {
       n.title = "Untitled meeting";
       await data("update", n);
@@ -619,7 +632,7 @@ export function App() {
     try {
       const prefs = await data<Preferences>("settings");
       if (!prefs.stt_model) {
-        setSettings(prefs);
+        openSettings(prefs);
         return;
       }
       downloadNote.current = current.current?.id ?? null;
@@ -657,6 +670,7 @@ export function App() {
     await flush();
     await data(action, { id: note.id });
     setNote(null);
+    setView({kind: trash ? "trash" : "home"});
     setSegments([]);
     await refresh();
   }
@@ -738,304 +752,15 @@ export function App() {
           <button onClick={() => setPendingAction(null)}>Cancel</button>
         </section>
       )}
-      <main>
-        <aside className="sidebar">
-          <h1>TalkKeeper</h1>
-          <button className="primary" onClick={() => void create().catch(fail)}>
-            New note
-          </button>
-          <input
-            aria-label="Search notes"
-            placeholder="Search notes"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <nav aria-label="Main">
-            <ul>
-              <li>
-                <button
-                  className="quiet"
-                  aria-current={
-                    !agenda &&
-                    !workspaceChat &&
-                    !directory &&
-                    !trash &&
-                    !settings
-                      ? "page"
-                      : undefined
-                  }
-                  onClick={() => {
-                    setSettings(null);
-                    setSetupChoice(true);
-                    setDirectory(null);
-                    setTrash(false);
-                    setAgenda(false);
-                    setWorkspaceChat(false);
-                  }}
-                >
-                  <SidebarIcon name="Notes" />
-                  Notes
-                </button>
-              </li>
-              <li>
-                <button
-                  className="quiet"
-                  aria-current={agenda && !settings ? "page" : undefined}
-                  onClick={() =>
-                    void flush()
-                      .then(() => {
-                        setSettings(null);
-                        setSetupChoice(true);
-                        setAgenda(true);
-                        setWorkspaceChat(false);
-                        setDirectory(null);
-                      })
-                      .catch(fail)
-                  }
-                >
-                  <SidebarIcon name="Today" />
-                  Today
-                </button>
-              </li>
-              <li>
-                <button
-                  className="quiet"
-                  aria-current={workspaceChat && !settings ? "page" : undefined}
-                  onClick={() =>
-                    void flush()
-                      .then(() => {
-                        setSettings(null);
-                        setSetupChoice(true);
-                        setAgenda(false);
-                        setWorkspaceChat(true);
-                        setDirectory(null);
-                      })
-                      .catch(fail)
-                  }
-                >
-                  <SidebarIcon name="Ask your notes" />
-                  Ask your notes
-                </button>
-              </li>
-              {(["people", "companies"] as const)
-                .filter(
-                  (kind) =>
-                    directoryCounts[kind] > 0 ||
-                    (kind === "people" &&
-                      notes.some((n) => n.attendees.length > 0)),
-                )
-                .map((kind) => (
-                  <li key={kind}>
-                    <button
-                      className="quiet"
-                      aria-current={
-                        directory === kind && !settings ? "page" : undefined
-                      }
-                      onClick={() => {
-                        void flush()
-                          .then(() => {
-                            setSettings(null);
-                            setSetupChoice(true);
-                            setPersonId(undefined);
-                            setDirectory(kind);
-                            setAgenda(false);
-                            setWorkspaceChat(false);
-                          })
-                          .catch(fail);
-                      }}
-                    >
-                      <SidebarIcon
-                        name={kind === "people" ? "People" : "Companies"}
-                      />
-                      {kind === "people" ? "People" : "Companies"}
-                    </button>
-                  </li>
-                ))}
-            </ul>
-          </nav>
-          <div className="folder-heading">
-            <h3>Folders</h3>
-            <button
-              className="quiet"
-              aria-label="New folder"
-              title="New folder"
-              onClick={() =>
-                setFolderEdit({
-                  id: crypto.randomUUID(),
-                  name: "",
-                  existing: false,
-                })
-              }
-            >
-              +
-            </button>
-          </div>
-          <button
-            className="quiet"
-            aria-pressed={!folder}
-            onClick={() => setFolder("")}
-          >
-            All notes
-          </button>
-          {!folders.length && <small>Group notes into folders.</small>}
-          {folders.map((f) => (
-            <div className="folder-row" key={f.id}>
-              <button
-                className="quiet"
-                aria-pressed={folder === f.id}
-                onClick={() => setFolder(f.id)}
-              >
-                {f.name}
-              </button>
-              <details>
-                <summary aria-label={`Folder options for ${f.name}`}>…</summary>
-                <button onClick={() => setFolderEdit({ ...f, existing: true })}>
-                  Rename
-                </button>
-                <button onClick={() => setDeleteFolder(f)}>
-                  Delete folder…
-                </button>
-              </details>
-            </div>
-          ))}
-          {folderEdit && (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!folderEdit.name.trim()) return;
-                void data("save_folder", {
-                  folder: {
-                    id: folderEdit.id,
-                    name: folderEdit.name.trim(),
-                    parent_id: null,
-                  },
-                  update: folderEdit.existing,
-                })
-                  .then(() => data<typeof folders>("folders"))
-                  .then(setFolders)
-                  .then(() => setFolderEdit(null))
-                  .catch(fail);
-              }}
-            >
-              <input
-                autoFocus
-                aria-label="Folder name"
-                value={folderEdit.name}
-                onChange={(e) =>
-                  setFolderEdit({ ...folderEdit, name: e.target.value })
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") setFolderEdit(null);
-                }}
-              />
-              <button type="submit">Apply</button>
-              <button type="button" onClick={() => setFolderEdit(null)}>
-                Cancel
-              </button>
-            </form>
-          )}
-          {deleteFolder && (
-            <section
-              role="alertdialog"
-              aria-label={`Delete the folder "${deleteFolder.name}"?`}
-            >
-              <h3>Delete the folder "{deleteFolder.name}"?</h3>
-              <p>The notes inside are kept and move to All notes.</p>
-              <button
-                onClick={() =>
-                  void data("delete_folder", { id: deleteFolder.id })
-                    .then(() => {
-                      setFolder("");
-                      setDeleteFolder(null);
-                      return data<typeof folders>("folders");
-                    })
-                    .then(setFolders)
-                    .then(refresh)
-                    .catch(fail)
-                }
-              >
-                Delete folder
-              </button>
-              <button onClick={() => setDeleteFolder(null)}>Cancel</button>
-            </section>
-          )}
-          {query && (
-            <div>
-              <h3>Results for "{query}"</h3>
-              <button className="quiet" onClick={() => setQuery("")}>
-                Clear
-              </button>
-              {!notes.length && <p>No notes mention "{query}".</p>}
-            </div>
-          )}
-          <div className="note-list">
-            {notes
-              .filter((n) => !folder || n.folder_id === folder)
-              .map((n, i, a) => (
-                <div key={n.id}>
-                  {!query &&
-                    (i === 0 ||
-                      noteGroup(n.created_at) !==
-                        noteGroup(a[i - 1].created_at)) && (
-                      <h3>{noteGroup(n.created_at)}</h3>
-                    )}
-                  <button
-                    className={note?.id === n.id ? "quiet active" : "quiet"}
-                    onClick={() => void select(n).catch(fail)}
-                  >
-                    {n.title}
-                    <small>
-                      {snippets[n.id] ||
-                        (captureNote === n.id
-                          ? "● Recording"
-                          : `${new Date(n.created_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })} · ${durations[n.id] ? `${Math.round(durations[n.id] / 60000)} min` : "no recording"}`)}
-                    </small>
-                  </button>
-                </div>
-              ))}
-          </div>
-          <button
-            className="quiet"
-            aria-current={
-              trash && !settings && !agenda && !directory && !workspaceChat
-                ? "page"
-                : undefined
-            }
-            onClick={() => {
-              setSettings(null);
-              setSetupChoice(true);
-              setAgenda(false);
-              setWorkspaceChat(false);
-              setDirectory(null);
-              setTrash(true);
-              setNote(null);
-            }}
-          >
-            <SidebarIcon name="Trash" />
-            Trash
-          </button>
-          <SetupCard
-            setup={setup}
-            systemAudio={systemAudio}
-            showOffer={setupChoice}
-          />
-          <button
-            className="quiet"
-            aria-current={settings ? "page" : undefined}
-            onClick={() =>
-              void data<Preferences>("settings").then(setSettings).catch(fail)
-            }
-          >
-            <SidebarIcon name="Settings" />
-            Settings
-          </button>
-        </aside>
-        <div
-          className={`workspace${note?.id === firstRunNote ? " setup-first-note" : ""}`}
-        >
+      <main className={`app-shell${collapsed ? " sidebar-collapsed" : ""}`}>
+        <Sidebar view={view} onNavigate={next => void navigate(next).catch(fail)} folders={folders} setFolders={setFolders} counts={{...directoryCounts, people: directoryCounts.people || (notes.some(n => n.attendees.length > 0) ? 1 : 0)}} onError={fail} refresh={refresh}>
+          <SetupCard setup={setup} systemAudio={systemAudio} showOffer={setupChoice} />
+        </Sidebar>
+        <div className={`workspace${note?.id === firstRunNote ? " setup-first-note" : ""}`}>
+          <TopBar collapsed={collapsed} onToggle={toggleSidebar} onSearch={() => setSearchOpen(true)} onCreate={() => void create().catch(fail)} />
+          {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} onOpen={n => { setSearchOpen(false); void select(n).catch(fail); }} onError={fail} />}
           {captureNote && visibleNote.current !== captureNote && (
-            <RecordingElsewhere
-              title={recordingTitle}
+            <RecordingElsewhere title={recordingTitle}
               elapsed={elapsed}
               status={status}
               problem={
@@ -1084,16 +809,17 @@ export function App() {
                 </button>
               </section>
             )}
-          {settings && setup.speechReady && (
+          {view.kind === "settings" && settings && setup.speechReady && (
             <button onClick={() => void setup.checkMicrophone()}>
               Check my microphone
             </button>
           )}
-          {settings ? (
+          {view.kind === "settings" && settings ? (
             <Settings
               initial={settings}
               onClose={() => {
                 setSettings(null);
+                setView(previousView.current);
                 void setup.refresh();
               }}
               onError={fail}
@@ -1125,6 +851,7 @@ export function App() {
               </p>
             ) : (
               <WorkspaceChat
+                initialQuestion={initialQuestion}
                 selected={selectedNotes}
                 onSelectedChange={setSelectedNotes}
                 folders={folders}
@@ -1164,16 +891,20 @@ export function App() {
                 })().catch(fail)
               }
             />
-          ) : trash && !note ? (
+          ) : view.kind === "trash" ? (
             <section>
               <h2>Trash</h2>
               <p>
                 Notes here can be restored. Nothing is deleted until you choose
                 "Delete forever".
               </p>
-              {!notes.length && <p>Trash is empty.</p>}
+              {!notes.length && <p>Trash is empty.</p>}<NotesList notes={notes} onOpen={n => void select(n).catch(fail)} />
             </section>
-          ) : note ? (
+          ) : view.kind === "home" ? (
+            <Home notes={notes} captureNote={captureNote} durations={durations} onOpen={n => void select(n).then(refresh).catch(fail)} onError={fail} onSettings={() => void navigate({kind:"settings"})} onAsk={question => { void navigate({kind:"chat"}, question).catch(fail); }} />
+          ) : view.kind === "space" ? (
+            <SpacePage captureNote={captureNote} durations={durations} name={folders.find(f => f.id === view.folder)?.name ?? "All notes"} notes={notes.filter(n => !view.folder || n.folder_id === view.folder)} onOpen={n => void select(n).catch(fail)} />
+          ) : view.kind === "note" && note ? (
             <>
               {!setup.speechReady && (
                 <p>
@@ -1231,12 +962,12 @@ export function App() {
                 onCommand={(command) => void capture(command)}
                 onSettings={() =>
                   void data<Preferences>("settings")
-                    .then(setSettings)
+                    .then(openSettings)
                     .catch(fail)
                 }
                 onMicrophone={() =>
                   void invoke("open_microphone_settings").catch(() =>
-                    data<Preferences>("settings").then(setSettings),
+                    data<Preferences>("settings").then(openSettings),
                   )
                 }
                 onDismissSilence={() => setAutoStop(false)}
@@ -1350,7 +1081,7 @@ export function App() {
                           );
                           if (p) {
                             setPersonId(p.id);
-                            setDirectory("people");
+                            setView({kind:"people"});
                           }
                         })
                         .catch(fail)
@@ -1471,7 +1202,7 @@ export function App() {
                       expiry={expiry}
                       onSettings={() =>
                         void data<Preferences>("settings")
-                          .then(setSettings)
+                          .then(openSettings)
                           .catch(fail)
                       }
                       state={
@@ -1513,7 +1244,7 @@ export function App() {
                   <Chat
                     onSettings={() =>
                       void data<Preferences>("settings")
-                        .then(setSettings)
+                        .then(openSettings)
                         .catch(fail)
                     }
                     key={note.id}

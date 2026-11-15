@@ -130,12 +130,14 @@ export function RecipeEditor({
   );
 }
 export function WorkspaceChat({
+  initialQuestion = "",
   selected,
   onSelectedChange,
   folders,
   onOpen,
   onSaved,
 }: {
+  initialQuestion?: string;
   selected: string[];
   onSelectedChange?: (ids: string[]) => void;
   folders: { id: string; name: string }[];
@@ -150,7 +152,7 @@ export function WorkspaceChat({
     [recipes, setRecipes] = useState<Recipe[]>([]),
     [recipeId, setRecipeId] = useState(""),
     [editing, setEditing] = useState<Recipe | null>(null),
-    [question, setQuestion] = useState(""),
+    [question, setQuestion] = useState(initialQuestion),
     [topic, setTopic] = useState(""),
     [busy, setBusy] = useState(false),
     [partial, setPartial] = useState(""),
@@ -606,6 +608,7 @@ export function WorkspaceChat({
       <label>
         Question
         <textarea
+          aria-label="Question"
           maxLength={8000}
           value={question}
           disabled={busy}
