@@ -209,3 +209,19 @@ jobs:
             gh api --method POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$name" \
               -H "Content-Type: application/octet-stream" --input "$file"
           done
+
+  # Give the installers plain-language names (for example "mac-apple-silicon" instead of
+  # "aarch64") once they are all attached to the draft.
+  rename-assets:
+    needs: [create-release, build]
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.create-release.result == 'success' && needs.build.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rename release files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: python3 scripts/rename-release-assets.py "$GITHUB_REPOSITORY" "$RELEASE_ID"

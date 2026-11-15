@@ -20,19 +20,20 @@ Expect rough edges.
 Installers for macOS, Windows, and Linux are published on the
 [Releases page](../../releases). TalkKeeper is not in any app store.
 
-**Which file do I download?**
+**Which file do I download?** The name of each file says which computer it is for:
 
 | Your computer | Download this file |
 | --- | --- |
-| Mac with an Apple chip (M1, M2, M3, M4 or newer) | the `.dmg` ending in `aarch64` |
-| Older Mac with an Intel processor | the `.dmg` ending in `x64` |
-| Windows | the `.exe` ending in `x64-setup` (or the `.msi` if your IT team asks for one) |
+| Mac with an Apple chip (M1, M2, M3, M4 or newer) | the `.dmg` with `mac-apple-silicon` in its name |
+| Older Mac with an Intel processor | the `.dmg` with `mac-intel` in its name |
+| Windows | the `.exe` with `windows-setup` in its name (or the `.msi` if your IT team asks for one) |
 | Linux (most distributions) | the `.AppImage` |
 | Debian, Ubuntu, Mint | the `.deb` |
 | Fedora, RHEL, openSUSE | the `.rpm` |
 
 Not sure which Mac you have? Open the Apple menu, then **About This Mac**. If it says
-**Chip: Apple M…**, take the `aarch64` file. If it says **Processor: Intel…**, take `x64`.
+**Chip: Apple M…**, take the Apple silicon file. If it says **Processor: Intel…**, take the Intel
+file. (Version 0.1.1 and earlier use `aarch64` for Apple silicon and `x64` for Intel.)
 The files starting with `talkkeeper-mcp` and the `.app.tar.gz` files are not installers; you can
 ignore them unless you want the optional connection for other AI tools.
 
