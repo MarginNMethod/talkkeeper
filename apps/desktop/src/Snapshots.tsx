@@ -101,19 +101,19 @@ export function SnapshotControls({
     }
   }
   return (
-    <section aria-label="Screen capture controls" className="snapshot-controls">
+    <section aria-label="Screen snapshots controls" className="snapshot-controls">
       {!enabled ? (
         <button
           disabled={status !== "recording" || !noteId}
           onClick={() => void pick().catch(onError)}
         >
-          Capture shared screen
+          Add screen snapshots
         </button>
       ) : (
         <>
           <span role="status">
             Screen snapshots {status === "paused" ? "paused" : "on"} · {count}{" "}
-            snapshots
+
           </span>
           <button
             onClick={() =>
@@ -122,7 +122,7 @@ export function SnapshotControls({
                 .catch(onError)
             }
           >
-            Stop snapshots
+            Turn off
           </button>
         </>
       )}
@@ -165,7 +165,7 @@ export function SnapshotControls({
                     });
               }}
             />
-            I understand and agree to capture this source
+            I understand and agree to take pictures of this source
           </label>
           <p>
             Every 10 seconds, changed images only. Up to 60 JPEGs per note, 1

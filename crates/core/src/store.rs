@@ -96,6 +96,38 @@ impl Store {
             tx.execute_batch(include_str!("../migrations/007_calendar.sql"))?;
             tx.pragma_update(None, "user_version", 7)?;
         }
+        // Legacy preferences did not track whether 30 was deliberately chosen.
+        // Migrate that old default once; preserve all other saved durations.
+        let saved: Option<String> = tx
+            .query_row(
+                "SELECT value FROM settings WHERE key='preferences'",
+                [],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let migrated: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM settings WHERE key='retention_defaults_v2')",
+            [],
+            |r| r.get(0),
+        )?;
+        if !migrated {
+            if let Some(saved) = saved {
+                let mut prefs: serde_json::Value = serde_json::from_str(&saved)?;
+                for key in ["retention", "snapshot_retention"] {
+                    if prefs[key] == 30 {
+                        prefs[key] = serde_json::json!(0);
+                    }
+                }
+                tx.execute(
+                    "UPDATE settings SET value=? WHERE key='preferences'",
+                    [serde_json::to_string(&prefs)?],
+                )?;
+            }
+            tx.execute(
+                "INSERT INTO settings(key,value) VALUES ('retention_defaults_v2','true')",
+                [],
+            )?;
+        }
         tx.commit()?;
         Ok(Self {
             conn,
@@ -359,6 +391,9 @@ impl Store {
         })
     }
     pub fn apply_transcript_retention(&mut self, days: u32) -> Result<usize> {
+        if days == 0 {
+            return Ok(0);
+        }
         let cutoff = Utc::now() - ChronoDuration::days(i64::from(days));
         self.write(|tx| {
             let mut count = 0;
@@ -367,6 +402,13 @@ impl Store {
                     if s.created_at < cutoff {
                         count +=
                             tx.execute("DELETE FROM segments WHERE id=?", [s.id.to_string()])?;
+                        tx.execute(
+                            "INSERT OR REPLACE INTO settings(key,value) VALUES (?,?)",
+                            params![
+                                format!("transcript_deleted.{}", note.id),
+                                serde_json::to_string(&days)?
+                            ],
+                        )?;
                     }
                 }
             }
@@ -898,5 +940,41 @@ mod chat_tests {
             .relevant_segments(note.id, "orchard", 5)
             .unwrap()
             .is_empty());
+    }
+}
+
+#[cfg(test)]
+mod retention_tests {
+    use super::*;
+    #[test]
+    fn legacy_defaults_migrate_once_and_explicit_durations_survive() {
+        for (old, expected) in [(30, 0), (90, 90), (365, 365), (0, 0), (17, 17)] {
+            let mut store = Store::open_in_memory().unwrap();
+            store
+                .set_setting(
+                    "preferences",
+                    &serde_json::json!({"retention":old,"snapshot_retention":old}),
+                )
+                .unwrap();
+            store
+                .conn
+                .execute("DELETE FROM settings WHERE key='retention_defaults_v2'", [])
+                .unwrap();
+            let mut store = Store::initialize(store.conn).unwrap();
+            let prefs = store.get_setting("preferences").unwrap().unwrap();
+            assert_eq!(prefs["retention"], expected);
+            assert_eq!(prefs["snapshot_retention"], expected);
+            store
+                .set_setting(
+                    "preferences",
+                    &serde_json::json!({"retention":30,"snapshot_retention":30}),
+                )
+                .unwrap();
+            let store = Store::initialize(store.conn).unwrap();
+            assert_eq!(
+                store.get_setting("preferences").unwrap().unwrap()["retention"],
+                30
+            );
+        }
     }
 }

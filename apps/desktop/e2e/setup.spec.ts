@@ -11,9 +11,9 @@ test("one click opens a note; speech and AI unlock independently and Settings pr
   await expect(page.getByRole("textbox", { name: "Note title" })).toHaveValue("Untitled meeting");
   await expect(page.getByRole("textbox", {name:"Rough notes"})).toBeFocused();
   await expect(page.getByRole("button",{name:"New note",exact:true})).toBeEnabled();
-  await expect(page.getByRole("button",{name:"Start capture",exact:true})).toBeDisabled();
+  await expect(page.getByRole("button",{name:"Record",exact:true})).toBeDisabled();
   await page.evaluate(() => (window as unknown as { readySpeech: () => void }).readySpeech());
-  await expect(page.getByRole("button",{name:"Start capture",exact:true})).toBeEnabled();
+  await expect(page.getByRole("button",{name:"Record",exact:true})).toBeEnabled();
   await expect(page.getByRole("button",{name:"Enhance",exact:true})).toBeDisabled();
   const card=page.getByRole("region",{name:"Setup status"});
   await expect(card.getByText(/1.4 of 6.8 GB/)).toBeVisible();

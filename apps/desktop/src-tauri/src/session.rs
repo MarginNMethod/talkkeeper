@@ -2,6 +2,63 @@ use super::*;
 use talkkeeper_audio::{Capture, CaptureConfig, Source};
 use talkkeeper_transcribe::{AudioChunk, Channel, Language, SttEngine, SttOptions, SttSession};
 
+pub(super) static DOWNLOAD_CANCEL: tokio::sync::Notify = tokio::sync::Notify::const_new();
+#[tauri::command]
+pub fn cancel_model_download() {
+    DOWNLOAD_CANCEL.notify_waiters();
+}
+
+pub struct ActiveCapture {
+    sender: tokio::sync::mpsc::Sender<String>,
+    note_id: Uuid,
+    state: &'static str,
+    elapsed: std::time::Duration,
+    since: std::time::Instant,
+}
+impl ActiveCapture {
+    fn elapsed_ms(&self) -> u64 {
+        (self.elapsed
+            + if self.state == "recording" {
+                self.since.elapsed()
+            } else {
+                std::time::Duration::ZERO
+            })
+        .as_millis() as u64
+    }
+    fn transition(&mut self, state: &'static str) {
+        self.elapsed = std::time::Duration::from_millis(self.elapsed_ms());
+        self.since = std::time::Instant::now();
+        self.state = state;
+    }
+    fn control(&self, note_id: Uuid, command: &str) -> Result<()> {
+        if self.note_id != note_id {
+            return Err("Recording belongs to another note".into());
+        }
+        self.sender.try_send(command.into()).map_err(err)
+    }
+}
+fn status_value(active: Option<&ActiveCapture>) -> Value {
+    match active {
+        Some(active) => {
+            json!({"note_id":active.note_id,"state":active.state,"elapsed_ms":active.elapsed_ms()})
+        }
+        None => json!({"note_id":null,"state":"stopped","elapsed_ms":0}),
+    }
+}
+#[tauri::command]
+pub fn capture_status(state: tauri::State<'_, AppState>) -> Result<Value> {
+    Ok(status_value(state.capture.lock().map_err(err)?.as_ref()))
+}
+fn transition(app: &tauri::AppHandle, status: &'static str) -> Result<()> {
+    let state = app.state::<AppState>();
+    let mut active = state.capture.lock().map_err(err)?;
+    if let Some(active) = active.as_mut() {
+        active.transition(status);
+    }
+    app.emit("capture://state", status_value(active.as_ref()))
+        .map_err(err)
+}
+
 pub(super) async fn begin_transcription(
     engine: &dyn SttEngine,
     prefs: &Value,
@@ -57,7 +114,13 @@ pub async fn start_capture(
         if app.state::<dictation::VoiceState>().is_active() {
             return Err("Stop dictation before starting meeting capture".into());
         }
-        *active = Some(tx);
+        *active = Some(ActiveCapture {
+            sender: tx,
+            note_id,
+            state: "starting",
+            elapsed: std::time::Duration::ZERO,
+            since: std::time::Instant::now(),
+        });
     }
     let result = prepare_capture(app, &state, note_id, prefs, rx)
         .await
@@ -73,7 +136,7 @@ async fn prepare_capture(
     state: &AppState,
     note_id: Uuid,
     prefs: Value,
-    rx: tokio::sync::mpsc::Receiver<String>,
+    mut rx: tokio::sync::mpsc::Receiver<String>,
 ) -> Result<()> {
     tokio::task::spawn_blocking(talkkeeper_audio::authorize_microphone)
         .await
@@ -82,6 +145,9 @@ async fn prepare_capture(
     let engine = speech_engine(state, &prefs).await?;
     let mut stt = begin_transcription(engine.as_ref(), &prefs).await?;
     let events = stt.events().ok_or("STT events unavailable")?;
+    if rx.try_recv().is_ok() {
+        return Err("Recording cancelled".into());
+    }
     let capture = tokio::task::spawn_blocking(|| {
         Capture::start(CaptureConfig {
             mic_device: None,
@@ -104,11 +170,7 @@ async fn prepare_capture(
         .lock()
         .map_err(err)?
         .recording(note_id, true);
-    app.emit(
-        "capture://state",
-        json!({"note_id": note_id, "state": "recording"}),
-    )
-    .map_err(err)?;
+    transition(&app, "recording")?;
     let app = app.clone();
     let store = state.store.clone();
     // SttSession is Send, but not Sync. Keep its input future on one runtime thread.
@@ -211,7 +273,7 @@ async fn run_capture(
                         _ => break,
                     };
                     app.state::<AppState>().snapshots.lock().map_err(err)?.recording(note_id, !paused);
-                    app.emit("capture://state", json!({"note_id": note_id, "state": status})).map_err(err)?;
+                    transition(&app, status)?;
                 }
                 error = capture.errors.recv() => {
                     match error { Some(e) => return Err(format!("Recording failed: {e}. Please check your audio devices and try again.")), None => return Err("The audio device stopped. Check your microphone and try again.".into()) }
@@ -222,6 +284,7 @@ async fn run_capture(
                     let level = talkkeeper_audio::rms_dbfs(&frame.samples);
                     if monitor.observe(clock.elapsed().as_millis() as u64, level > -40.0).is_some() {
                         app.emit("capture://auto-stop-suggested", json!({"note_id": note_id})).map_err(err)?;
+                        notify_recording(&app, note_id, true);
                     }
                     let warning = pipeline.push(&stt, frame, clock.elapsed().as_millis() as u64, |source, level| {
                         app.emit("capture://level", json!({"note_id":note_id,"source":source,"level":level})).map_err(err)
@@ -235,10 +298,12 @@ async fn run_capture(
                     }
                 }
                 _ = tick.tick() => {
+                    app.emit("capture://lag", json!({"note_id":note_id,"seconds":stt.pending_seconds()})).map_err(err)?;
                     let snapshot_app = app.clone();
                     tauri::async_runtime::spawn_blocking(move || snapshots::tick(&snapshot_app));
                     if !paused && monitor.observe(clock.elapsed().as_millis() as u64, false).is_some() {
                         app.emit("capture://auto-stop-suggested", json!({"note_id": note_id})).map_err(err)?;
+                        notify_recording(&app, note_id, true);
                     }
                 }
             }
@@ -248,6 +313,7 @@ async fn run_capture(
     if let Ok(mut session) = app.state::<AppState>().snapshots.lock() {
         session.stop();
     }
+    let _ = transition(&app, "finishing");
     capture.stop();
     let finish = stt.finish().await.map_err(err);
     let drain = match output_result {
@@ -256,11 +322,28 @@ async fn run_capture(
     };
     // The decoder error explains a closed input queue; preserve it first.
     let result = drain.and(result).and(finish);
+    if result.is_err() {
+        notify_recording(&app, note_id, false);
+    }
     let state = app.state::<AppState>();
+    let elapsed_ms = state
+        .capture
+        .lock()
+        .ok()
+        .and_then(|active| active.as_ref().map(ActiveCapture::elapsed_ms))
+        .unwrap_or(0);
     if let Ok(mut db) = store.lock() {
         if let Ok(Some(mut note)) = db.get_note(note_id) {
             note.ended_at = Some(chrono::Utc::now());
             let _ = db.update_note(&note);
+            let key = format!("recorded_duration.{note_id}");
+            let previous = db
+                .get_setting(&key)
+                .ok()
+                .flatten()
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let _ = db.set_setting(&key, &json!(previous + elapsed_ms));
         }
     }
     if let Ok(mut active) = state.capture.lock() {
@@ -269,34 +352,33 @@ async fn run_capture(
     let _ = setup::queue_recording(&store, note_id);
     let _ = app.emit(
         "capture://state",
-        json!({"note_id": note_id, "state": "stopped", "error": result.err()}),
+        json!({"note_id": note_id, "state": "stopped", "elapsed_ms":elapsed_ms, "error": result.err()}),
     );
     tauri::async_runtime::spawn(async move {
         let _ = setup::drain_queue(&app).await;
     });
 }
 
-fn control(state: tauri::State<'_, AppState>, command: &str) -> Result<()> {
+fn control(state: tauri::State<'_, AppState>, note_id: Uuid, command: &str) -> Result<()> {
     state
         .capture
         .lock()
         .map_err(err)?
         .as_ref()
         .ok_or("No active capture")?
-        .try_send(command.into())
-        .map_err(err)
+        .control(note_id, command)
 }
 #[tauri::command]
-pub fn pause_capture(state: tauri::State<'_, AppState>) -> Result<()> {
-    control(state, "pause")
+pub fn pause_capture(state: tauri::State<'_, AppState>, note_id: Uuid) -> Result<()> {
+    control(state, note_id, "pause")
 }
 #[tauri::command]
-pub fn resume_capture(state: tauri::State<'_, AppState>) -> Result<()> {
-    control(state, "resume")
+pub fn resume_capture(state: tauri::State<'_, AppState>, note_id: Uuid) -> Result<()> {
+    control(state, note_id, "resume")
 }
 #[tauri::command]
-pub fn stop_capture(state: tauri::State<'_, AppState>) -> Result<()> {
-    control(state, "stop")
+pub fn stop_capture(state: tauri::State<'_, AppState>, note_id: Uuid) -> Result<()> {
+    control(state, note_id, "stop")
 }
 
 pub(super) async fn speech_engine(state: &AppState, prefs: &Value) -> Result<Box<dyn SttEngine>> {
@@ -338,6 +420,7 @@ struct FramePipeline {
     mic: talkkeeper_transcribe::StreamingResampler,
     system: talkkeeper_transcribe::StreamingResampler,
     mic_sound: bool,
+    last_sound_ms: u64,
     silent_warning: bool,
     mic_next_ms: Option<u64>,
     system_next_ms: Option<u64>,
@@ -361,13 +444,18 @@ impl FramePipeline {
         )?;
         let mut warning = None;
         if frame.source == Source::Mic {
-            if talkkeeper_audio::rms_dbfs(&frame.samples) > -90.0 {
+            if level > -60.0 {
                 self.mic_sound = true;
-                if self.silent_warning {
-                    self.silent_warning = false;
-                    warning = Some(false);
-                }
-            } else if !self.mic_sound && !self.silent_warning && elapsed_ms >= 4000 {
+                self.last_sound_ms = elapsed_ms;
+            }
+            if level > -40.0 && self.silent_warning {
+                self.silent_warning = false;
+                warning = Some(false);
+            } else if level <= -60.0
+                && !self.silent_warning
+                && elapsed_ms.saturating_sub(self.last_sound_ms)
+                    >= if self.mic_sound { 20000 } else { 8000 }
+            {
                 self.silent_warning = true;
                 warning = Some(true);
             }
@@ -430,9 +518,130 @@ pub fn open_microphone_settings() -> Result<()> {
     Err("Open your system sound settings and check microphone access in your audio server or sandbox settings.".into())
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn stop_from_notification(app: &tauri::AppHandle, note_id: Uuid) {
+    let state = app.state::<AppState>();
+    if let Ok(active) = state.capture.lock() {
+        if let Some(active) = active.as_ref() {
+            let _ = active.control(note_id, "stop");
+        }
+    };
+}
+
+// Notifications use the platform's own tools and sound; no audio is sent out.
+fn notify_recording(app: &tauri::AppHandle, note_id: Uuid, quiet: bool) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        #[cfg(target_os = "linux")]
+        {
+            if quiet {
+                if let Ok(output) = std::process::Command::new("notify-send")
+                    .args([
+                        "--app-name=TalkKeeper",
+                        "--action=stop=Stop recording",
+                        "--action=keep=Keep recording",
+                        "--wait",
+                        "It's been quiet for 5 minutes",
+                        "Has the meeting ended?",
+                    ])
+                    .output()
+                {
+                    if String::from_utf8_lossy(&output.stdout).trim() == "stop" {
+                        let state = app.state::<AppState>();
+                        if let Ok(active) = state.capture.lock() {
+                            if let Some(active) = active.as_ref() {
+                                let _ = active.control(note_id, "stop");
+                            }
+                        };
+                    }
+                }
+            } else {
+                let _ = std::process::Command::new("notify-send")
+                    .args([
+                        "--app-name=TalkKeeper",
+                        "TalkKeeper stopped recording",
+                        "Everything up to this point is saved in the transcript.",
+                    ])
+                    .status();
+                let _ = std::process::Command::new("canberra-gtk-play")
+                    .args(["--id=dialog-warning"])
+                    .status();
+            }
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let script = if quiet {
+                "display notification \"Has the meeting ended?\" with title \"It's been quiet for 5 minutes\" sound name \"Glass\"\ndisplay dialog \"Has the meeting ended?\" with title \"It's been quiet for 5 minutes\" buttons {\"Keep recording\", \"Stop recording\"} default button \"Keep recording\""
+            } else {
+                "display notification \"Everything up to this point is saved in the transcript.\" with title \"TalkKeeper stopped recording\" sound name \"Glass\""
+            };
+            if let Ok(output) = std::process::Command::new("osascript")
+                .args(["-e", script])
+                .output()
+            {
+                if quiet
+                    && String::from_utf8_lossy(&output.stdout)
+                        .contains("button returned:Stop recording")
+                {
+                    stop_from_notification(&app, note_id);
+                }
+            }
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let title = if quiet {
+                "It's been quiet for 5 minutes"
+            } else {
+                "TalkKeeper stopped recording"
+            };
+            let script = format!("Add-Type -AssemblyName System.Windows.Forms; [System.Media.SystemSounds]::Exclamation.Play(); $notice = New-Object System.Windows.Forms.NotifyIcon; $notice.Icon = [System.Drawing.SystemIcons]::Information; $notice.Visible = $true; $notice.ShowBalloonTip(10000, \"{title}\", 'Open TalkKeeper to review the recording.', [System.Windows.Forms.ToolTipIcon]::Warning); Start-Sleep -Seconds 10; $notice.Dispose()");
+            let script = if quiet {
+                format!(
+                    r#"{script}; $form = New-Object System.Windows.Forms.Form; $form.Text = "It's been quiet for 5 minutes"; $form.Width=390; $form.Height=160; $stop = New-Object System.Windows.Forms.Button; $stop.Text='Stop recording'; $stop.Width=150; $stop.Top=40; $stop.Left=10; $stop.DialogResult=[System.Windows.Forms.DialogResult]::Yes; $keep = New-Object System.Windows.Forms.Button; $keep.Text='Keep recording'; $keep.Width=150; $keep.Top=40; $keep.Left=180; $keep.DialogResult=[System.Windows.Forms.DialogResult]::No; $form.Controls.AddRange(@($stop,$keep)); if ($form.ShowDialog() -eq [System.Windows.Forms.DialogResult]::Yes) {{ Write-Output 'stop' }}; $form.Dispose()"#
+                )
+            } else {
+                script
+            };
+            if let Ok(output) = std::process::Command::new("powershell")
+                .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+                .output()
+            {
+                if quiet && String::from_utf8_lossy(&output.stdout).trim() == "stop" {
+                    stop_from_notification(&app, note_id);
+                }
+            }
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn status_and_controls_are_scoped_to_note() {
+        let (sender, mut rx) = tokio::sync::mpsc::channel(8);
+        let id = Uuid::new_v4();
+        let mut active = ActiveCapture {
+            sender,
+            note_id: id,
+            state: "recording",
+            elapsed: std::time::Duration::from_secs(2),
+            since: std::time::Instant::now(),
+        };
+        assert_eq!(status_value(None)["state"], "stopped");
+        assert_eq!(status_value(Some(&active))["note_id"], id.to_string());
+        for command in ["pause", "stop"] {
+            assert!(active.control(Uuid::new_v4(), command).is_err());
+        }
+        assert!(rx.try_recv().is_err());
+        active.control(id, "pause").unwrap();
+        assert_eq!(rx.try_recv().unwrap(), "pause");
+        active.transition("paused");
+        let elapsed = active.elapsed_ms();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        assert_eq!(active.elapsed_ms(), elapsed);
+        assert!(elapsed >= 2000);
+    }
     struct UnavailableEngine;
     #[async_trait::async_trait]
     impl SttEngine for UnavailableEngine {
@@ -538,11 +747,12 @@ mod tests {
         let stt = talkkeeper_transcribe::segmented_session(SlowDecoder, SttOptions::default());
         let mut pipeline = FramePipeline::default();
         for (ms, sound, expected) in [
-            (3990, false, None),
-            (4000, false, Some(true)),
-            (5000, false, None),
-            (5010, true, Some(false)),
-            (6000, false, None),
+            (7990, false, None),
+            (8000, false, Some(true)),
+            (9000, false, None),
+            (9010, true, Some(false)),
+            (10000, false, None),
+            (30010, false, Some(true)),
         ] {
             assert_eq!(
                 pipeline

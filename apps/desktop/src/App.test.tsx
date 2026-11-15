@@ -45,6 +45,7 @@ test("transcript selection deletes only selected segments", () => {
       onCopy={null}
     />,
   );
+  fireEvent.click(screen.getByText("Select"));
   fireEvent.click(screen.getByLabelText("Select segment 2"));
   fireEvent.click(screen.getByText("Delete selected"));
   expect(remove).toHaveBeenCalledWith(["two"]);

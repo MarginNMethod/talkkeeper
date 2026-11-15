@@ -41,32 +41,32 @@ afterEach(() => {
 test("off by default, first consent, source picker, indicator and one-click stop", async () => {
   const onError = vi.fn();
   render(<SnapshotControls noteId="n1" status="recording" onError={onError} />);
-  fireEvent.click(screen.getByText("Capture shared screen"));
+  fireEvent.click(screen.getByText("Add screen snapshots"));
   const start = await screen.findByText("Start snapshots");
   expect((start as HTMLButtonElement).disabled).toBe(true);
   expect(screen.getByText(/private messages/)).toBeTruthy();
   fireEvent.click(
-    screen.getByLabelText("I understand and agree to capture this source"),
+    screen.getByLabelText("I understand and agree to take pictures of this source"),
   );
   await screen.findByText("Slides window");
   fireEvent.change(screen.getByLabelText("Screen source"), {
     target: { value: "window:2" },
   });
   fireEvent.click(start);
-  await screen.findByText("Screen snapshots on · 1 snapshots");
+  await screen.findByText("Screen snapshots on · 1");
   expect(invoke).toHaveBeenCalledWith("snapshot_control", {
     action: "enable",
     source: "window:2",
     confirmed: true,
   });
-  fireEvent.click(screen.getByText("Stop snapshots"));
-  await screen.findByText("Capture shared screen");
+  fireEvent.click(screen.getByText("Turn off"));
+  await screen.findByText("Add screen snapshots");
   expect(onError).not.toHaveBeenCalled();
 });
 test("stopped capture cannot enable snapshots", () => {
   render(<SnapshotControls noteId={null} status="stopped" onError={vi.fn()} />);
   expect(
-    (screen.getByText("Capture shared screen") as HTMLButtonElement).disabled,
+    (screen.getByText("Add screen snapshots") as HTMLButtonElement).disabled,
   ).toBe(true);
 });
 test("gallery timestamps, exclusion, deletion, unsupported model and explicit cloud confirmation", async () => {

@@ -21,7 +21,7 @@ import { WorkspaceChat } from "./WorkspaceChat";
 import { Chat } from "./Chat";
 import { CopyTranscript } from "./CopyTranscript";
 import { SnapshotControls, SnapshotGallery } from "./Snapshots";
-import { CaptureFeedback, MicrophoneSettingsButton } from "./CaptureFeedback";
+import { RecordBar, RecordingElsewhere } from "./RecordBar";
 import { Summary } from "./Summary";
 export function App() {
   const [notes, setNotes] = useState<Note[]>([]),
@@ -40,23 +40,55 @@ export function App() {
     [warning, setWarning] = useState<{note_id:string; kind:string; active:boolean} | null>(null),
     [captureNote, setCaptureNote] = useState<string | null>(null),
     [levels, setLevels] = useState<Record<string, number>>({}),
-    [notice, setNotice] = useState(""),
+    [recordErrors, setRecordErrors] = useState<Record<string,string>>({}),
+    [failedTakes, setFailedTakes] = useState<Record<string,number>>({}),
+    [finishedNote, setFinishedNote] = useState<string | null>(null),
+    [elapsed, setElapsed] = useState(0),
+    [durations, setDurations] = useState<Record<string,number>>({}),
+    [captureTitle, setCaptureTitle] = useState("another note"),
+    [speechSize, setSpeechSize] = useState<string | undefined>(),
+    [wordsAt, setWordsAt] = useState(0),
+    [lag, setLag] = useState(0),
+    [levelsAt, setLevelsAt] = useState(0),
+    [dictating, setDictating] = useState(false),
+    [expiry, setExpiry] = useState<{deleted_after?:number;expires?:string} | null>(null),
     [autoStop, setAutoStop] = useState(false),
     [enhancing, setEnhancing] = useState(false),
     [folders, setFolders] = useState<{ id: string; name: string }[]>([]),
     [folder, setFolder] = useState(""),
+    [download, setDownload] = useState<{percent:number;done:string;total:string;time:string} | null>(null),
+    [downloadReady, setDownloadReady] = useState(false),
     [progress, setProgress] = useState("");
   const [directory, setDirectory] = useState<"people" | "companies" | null>(
     null,
   );
   const startPending = useRef(false);
+  const captureRef = useRef<string | null>(null);
+  const captureState = useRef("stopped");
+  const restart = useRef(false);
+  const clock = useRef({ elapsed: 0, at: Date.now() });
+  const downloadStart = useRef(0);
+  const downloadNote = useRef<string | null>(null);
+  const visibleNote = useRef<string | null>(null);
+  const [statusLoaded, setStatusLoaded] = useState(false);
+  useEffect(() => {
+    void invoke<{note_id:string|null;state:string;elapsed_ms:number}>("capture_status").then(s => {
+      if (!s) return;
+      captureRef.current = s.note_id; captureState.current = s.state;
+      setCaptureNote(s.note_id); setStatus(s.state); clock.current = {elapsed:s.elapsed_ms, at:Date.now()}; setElapsed(s.elapsed_ms);
+    }).catch(e => setRecordError(String(e))).finally(() => setStatusLoaded(true));
+    const timer = setInterval(() => { if (captureState.current === "recording") setElapsed(clock.current.elapsed + Date.now() - clock.current.at); }, 250);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => { if (captureNote) void data<Note>("get", {id:captureNote}).then(n => { if (n) setCaptureTitle(n.title); }).catch(() => {}); }, [captureNote]);
+  useEffect(() => { setLevels({}); setLag(0); setAutoStop(false); setWarning(null); setDownload(null); setDownloadReady(false); setFinishedNote(null); }, [note?.id]);
   useEffect(() => { void invoke<{system_audio:boolean}>("capture_capabilities").then(c => setSystemAudio(c.system_audio)).catch(fail); }, []);
   const [agenda, setAgenda] = useState(false);
   const [personId, setPersonId] = useState<string | undefined>();
   const [workspaceChat, setWorkspaceChat] = useState(false);
   const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
   const [citationSeq, setCitationSeq] = useState<number | null>(null);
-  useEffect(() => { if (citationSeq !== null && !workspaceChat) document.getElementById(`segment-${citationSeq}`)?.scrollIntoView?.({ behavior: "smooth" }); }, [segments, workspaceChat, citationSeq]);
+  useEffect(() => { if (citationSeq !== null && !workspaceChat) { const target = document.getElementById(`segment-${citationSeq}`); if (target) { target.scrollIntoView?.({ behavior: "smooth" }); setCitationSeq(null); } } }, [segments, workspaceChat, citationSeq]);
   const setup = useSetup();
   const [setupChoice, setSetupChoice] = useState(false);
   const [firstRunNote,setFirstRunNote] = useState<string | null>(null);
@@ -76,7 +108,10 @@ export function App() {
     saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     saveQueue = useRef(Promise.resolve());
   current.current = note;
+  visibleNote.current = !settings && !agenda && !directory && !workspaceChat ? note?.id ?? null : null;
   const fail = (e: unknown) => setError(String(e));
+  const recordError = recordErrors[note?.id ?? ""] ?? "";
+  const setRecordError = (text: string, id = current.current?.id ?? "") => setRecordErrors(errors => ({...errors,[id]:text}));
   async function refresh() {
     if (query) {
       const hits = await data<{ note: Note; snippet: string }[]>("search", {
@@ -101,6 +136,7 @@ export function App() {
   useEffect(() => {
     const subscriptions = [
       listen<Segment>("transcript://segment", (e) => {
+        if (e.payload.note_id === captureRef.current) setWordsAt(Date.now());
         if (e.payload.note_id === current.current?.id)
           setSegments((s) => [
             ...s.filter((x) => x.id !== e.payload.id),
@@ -119,27 +155,37 @@ export function App() {
               : n,
           );
       }),
-      listen<{ note_id: string; state: string; error?: string }>(
+      listen<{ note_id: string; state: string; elapsed_ms?: number; error?: string }>(
         "capture://state",
         (e) => {
-          setStatus(e.payload.state);
-          if (e.payload.state === "stopped") setWarning(null);
-          setCaptureNote(
-            e.payload.state === "stopped" ? null : e.payload.note_id,
-          );
-          if (e.payload.error) fail(e.payload.error);
+          const event = e.payload;
+          const time = event.elapsed_ms ?? (clock.current.elapsed + (captureState.current === "recording" ? Date.now() - clock.current.at : 0));
+          clock.current = {elapsed:time, at:Date.now()}; setElapsed(time);
+          captureState.current = event.state;
+          captureRef.current = event.state === "stopped" ? null : event.note_id;
+          setStatus(event.state); setCaptureNote(captureRef.current);
+          if (event.state === "recording") setStarting(false);
+          if (event.state === "stopped") {
+            setWarning(null); setLevels({}); setLag(0); setAutoStop(false); setDownload(null); setDownloadReady(false); setFinishedNote(event.note_id);
+            setDurations(d => ({...d,[event.note_id]:(d[event.note_id] ?? 0) + time}));
+            if (event.error) { setRecordError(event.error, event.note_id); setFailedTakes(takes => ({...takes,[event.note_id]:time})); }
+            if (restart.current) { restart.current = false; void capture("start_capture", event.note_id); }
+          }
         },
       ),
-      listen<{ source: string; level: number }>("capture://level", (e) =>
-        setLevels((l) => ({ ...l, [e.payload.source]: e.payload.level })),
-      ),
-      listen<{note_id:string; kind:string; active:boolean}>("capture://warning", e => setWarning(e.payload)),
-      listen("capture://auto-stop-suggested", () => setAutoStop(true)),
-      listen<{ downloaded: number; total: number }>("model://progress", (e) =>
-        setProgress(
-          `Model download: ${Math.round((e.payload.downloaded / e.payload.total) * 100)}%`,
-        ),
-      ),
+      listen<{ note_id:string; source: string; level: number }>("capture://level", (e) => {
+        if (e.payload.note_id === visibleNote.current && e.payload.note_id === captureRef.current && captureState.current === "recording") { setLevels((l) => ({ ...l, [e.payload.source]: e.payload.level })); setLevelsAt(Date.now()); }
+      }),
+      listen<{note_id:string; kind:string; active:boolean}>("capture://warning", e => { if (e.payload.note_id === visibleNote.current) setWarning(e.payload); }),
+      listen<{note_id:string;seconds:number}>("capture://lag", e => { if (e.payload.note_id === visibleNote.current) setLag(e.payload.seconds); }),
+      listen<{state:string}>("dictation://state", e => setDictating(["listening", "transcribing", "inserting"].includes(e.payload.state))),
+      listen<{note_id:string}>("capture://auto-stop-suggested", e => { if (e.payload.note_id === visibleNote.current) setAutoStop(true); }),
+      listen<{ downloaded: number; total: number }>("model://progress", (e) => {
+        if (downloadNote.current !== visibleNote.current || !downloadStart.current) return;
+        const {downloaded, total} = e.payload;
+        const remaining = downloaded ? (Date.now() - downloadStart.current) / downloaded * (total - downloaded) / 60000 : 0;
+        setDownload({percent:Math.round(downloaded / total * 100),done:`${Math.round(downloaded / 1e6)} MB`,total:`${Math.round(total / 1e6)} MB`,time:`${Math.max(1, Math.round(remaining))} min`});
+      }),
     ];
     return () => {
       for (const p of subscriptions)
@@ -184,9 +230,13 @@ export function App() {
     await flush();
     setDirectory(null);
     setWorkspaceChat(false);
+    const lines = await data<Segment[]>("segments", {id:n.id});
     setNote(n);
     setTemplate(n.template_id ?? "auto");
-    setSegments(await data("segments", { id: n.id }));
+    setSegments(lines);
+    setExpiry(null);
+    void data<number>("recorded_duration", {id:n.id}).then(ms => { if (typeof ms === "number") setDurations(d => ({...d,[n.id]:ms})); }).catch(fail);
+    void data<{deleted_after?:number;expires?:string}>("transcript_expiry", {id:n.id}).then(value => { if (current.current?.id === n.id) setExpiry(value); }).catch(fail);
   }
   async function create(firstRun = false) {
     await flush();
@@ -224,21 +274,58 @@ export function App() {
     await flush();
     await data("export", { id: note?.id, format, copy, save: !copy });
   }
-  async function capture(command: string) {
+  async function capture(command: string, id = current.current?.id) {
+    if (command === "cancel_download") { await invoke("cancel_model_download"); downloadStart.current = 0; setDownload(null); return; }
+    if (!id) return;
+    if (command === "restart") { restart.current = true; command = "stop_capture"; }
     const start = command === "start_capture";
     if (start && startPending.current) return;
-    if (start) { startPending.current = true; setStarting(true); setError(""); setWarning(null); setLevels({}); }
+    if (!start && id !== captureRef.current) return;
+    if (start) { captureRef.current = id; captureState.current = "starting"; setCaptureNote(id); startPending.current = true; setStarting(true); setRecordError("", id); setFailedTakes(takes => { const next = {...takes}; delete next[id]; return next; }); setWarning(null); setLevels({}); setElapsed(0); setWordsAt(0); setFinishedNote(null); clock.current = {elapsed:0,at:Date.now()}; }
+    if (command === "stop_capture") setStatus("finishing");
     try {
       if (start && setup.status?.mic_checked === false) {
         const checked = await setup.checkMicrophone();
         if (checked !== "success") return;
       }
       await flush();
-      await invoke(command, { noteId: note?.id });
-      if (start) setNotice(await data<string>("notice"));
+      await invoke(command, { noteId:id });
+    } catch (e) {
+      const text = String(e);
+      if (/Download the selected|Choose an STT|Unknown local model|model verification/.test(text)) {
+        void Promise.all([data<Preferences>("settings"), data<{name:string;size:number}[]>("speech_models")]).then(([prefs, models]) => {
+          const bytes = models?.find(m => m.name === prefs?.stt_model)?.size;
+          setSpeechSize(bytes ? bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.round(bytes/1e6)} MB` : undefined);
+        }).catch(() => {});
+      }
+      if (text.includes("Stop dictation")) setDictating(true);
+      else if (text.includes("Capture already active")) {
+        const s = await invoke<{note_id:string;state:string;elapsed_ms:number}>("capture_status");
+        captureRef.current = s.note_id; captureState.current = s.state; setCaptureNote(s.note_id); setStatus(s.state); clock.current = {elapsed:s.elapsed_ms,at:Date.now()}; setElapsed(s.elapsed_ms);
+      } else if (!text.includes("Recording cancelled")) setRecordError(text, id);
+      if (start && !text.includes("Capture already active")) { captureRef.current = null; captureState.current = "stopped"; setCaptureNote(null); setStatus("stopped"); }
+      restart.current = false;
     } finally {
       if (start) { startPending.current = false; setStarting(false); }
     }
+  }
+  async function downloadSpeech() {
+    try {
+      const prefs = await data<Preferences>("settings");
+      if (!prefs.stt_model) { setSettings(prefs); return; }
+      downloadNote.current = current.current?.id ?? null; downloadStart.current = Date.now();
+      setDownload({percent:0,done:"0 MB",total:"…",time:"…"});
+      await invoke("download_model", {name:prefs.stt_model});
+      downloadStart.current = 0;
+      if (downloadNote.current === visibleNote.current) { setDownload(null); setRecordError(""); setDownloadReady(true); setTimeout(() => setDownloadReady(false), 6000); }
+    } catch (e) { setDownload(null); if (!String(e).includes("Download cancelled")) setRecordError(String(e)); }
+  }
+  function goToRecording() {
+    if (captureNote) void data<Note>("get", {id:captureNote}).then(n => { setSettings(null); return select(n); }).catch(fail);
+  }
+  const recordingTitle = notes.find(n => n.id === captureNote)?.title ?? captureTitle;
+  function stopOther() {
+    if (window.confirm(`Stop the recording in "${recordingTitle}"?`)) void capture("stop_capture", captureNote ?? undefined);
   }
   async function mutate(action: string) {
     if (!note) return;
@@ -250,11 +337,9 @@ export function App() {
   }
   return (
     <>
-      {status !== "stopped" && <aside role="status" aria-label="Capture indicator">Capture {status}<button onClick={() => void invoke("stop_capture").catch(fail)}>Stop capture</button></aside>}
-      {setup.quitRequested && <section role="dialog" aria-label="Setup isn't finished yet"><h2>Setup isn't finished yet</h2><p>If you quit now, the download pauses and carries on next time you open TalkKeeper.</p><button onClick={()=>setup.setQuitRequested(false)}>Keep TalkKeeper open</button><button onClick={()=>void setup.quit()}>Quit anyway</button><label><input type="checkbox" checked={setup.dontAsk} onChange={e=>setup.setDontAsk(e.target.checked)} />Don't ask again</label></section>}
-      <CalendarAutoCapture active={status !== "stopped"} onOpen={async n => { await select(n); await refresh(); }} onError={fail} />
+      <CalendarAutoCapture active={status !== "stopped"} onOpen={async n => { await select(n); await refresh(); }} onError={e => setRecordError(String(e))} />
       <CalendarReminder onOpen={n => void select(n).then(refresh).catch(fail)} onError={fail} />
-      {status !== "stopped" && <SnapshotControls noteId={captureNote} status={status} onError={fail} />}
+      {setup.quitRequested && <section role="dialog" aria-label="Setup isn't finished yet"><h2>Setup isn't finished yet</h2><p>If you quit now, the download pauses and carries on next time you open TalkKeeper.</p><button onClick={()=>setup.setQuitRequested(false)}>Keep TalkKeeper open</button><button onClick={()=>void setup.quit()}>Quit anyway</button><label><input type="checkbox" checked={setup.dontAsk} onChange={e=>setup.setDontAsk(e.target.checked)} />Don't ask again</label></section>}
     <main>
       <aside className="sidebar">
         <h1>TalkKeeper</h1>
@@ -396,10 +481,10 @@ export function App() {
         </button>
       </aside>
       <div className={`workspace${note?.id === firstRunNote ? " setup-first-note" : ""}`}>
+        {captureNote && visibleNote.current !== captureNote && <RecordingElsewhere title={recordingTitle} elapsed={elapsed} status={status} problem={recordErrors[captureNote] ? "Recording needs attention" : undefined} onGo={goToRecording} onStop={stopOther} /> }
         {error && (
           <div role="alert">
             {error}
-            {error.toLowerCase().includes("microphone") && <MicrophoneSettingsButton onError={fail} />}
             <button onClick={() => setError("")}>Dismiss</button>
           </div>
         )}
@@ -465,6 +550,11 @@ export function App() {
           />
         ) : note ? (
           <>
+            {!setup.speechReady && <p>Recording will be ready in about a minute. You can type notes now.</p>}
+            {setup.speechReady && !setup.aiReady && <p>You can record now. AI notes will be written when the AI model finishes downloading.</p>}
+            <RecordBar key={`record-${note.id}`} state={!statusLoaded || (starting && captureNote === note.id) ? "starting" : captureNote === note.id ? status : "stopped"} elapsed={captureNote === note.id || finishedNote === note.id || (captureNote && captureNote !== note.id) ? elapsed : durations[note.id] ?? 0} hasTranscript={segments.length > 0} finished={finishedNote === note.id} systemAudio={systemAudio} speechSize={speechSize} lag={lag} levels={levels} levelsAt={levelsAt} warning={warning?.note_id === note.id && warning.active ? warning.kind : null} silence={autoStop} error={recordError} errorEnded={failedTakes[note.id] !== undefined} errorElapsed={failedTakes[note.id]} otherTitle={captureNote && captureNote !== note.id ? recordingTitle : undefined} trashed={!!note.deleted_at} dictating={dictating} speechReady={setup.speechReady} wordsAt={wordsAt}
+              onCommand={command => void capture(command)} onSettings={() => void data<Preferences>("settings").then(setSettings).catch(fail)} onMicrophone={() => void invoke("open_microphone_settings").catch(() => data<Preferences>("settings").then(setSettings))} onDismissSilence={() => setAutoStop(false)} onRestore={() => void mutate("restore").catch(fail)} onGo={goToRecording} onStopOther={stopOther} onStopDictation={() => void invoke("dictation_control", {action:"stop"}).catch(e => setRecordError(String(e)))} onCopyNotice={() => void data("copy_notice").catch(e => setRecordError(String(e)))} onDownload={() => void downloadSpeech()} download={download} downloadReady={downloadReady}
+              snapshots={<SnapshotControls noteId={note.id} status={status} onError={e => setRecordError(String(e))} />} />
             <CalendarLink note={note} onError={fail} onOpen={n => void select(n).catch(fail)} />
             <header>
               <input
@@ -473,13 +563,6 @@ export function App() {
                 value={note.title}
                 onChange={(e) => update({ title: e.target.value })}
               />
-              <span className="pill">
-                {status}
-                {captureNote && captureNote !== note.id
-                  ? " · another note"
-                  : ""}
-              </span>
-              <CopyTranscript note={note} segments={segments} />
               <details>
                 <summary>Export</summary>
                 {[
@@ -517,6 +600,7 @@ export function App() {
               ) : (
                 <button
                   disabled={captureNote === note.id}
+                  title={captureNote === note.id ? "Stop the recording before moving this note to the trash." : undefined}
                   onClick={() => void mutate("delete").catch(fail)}
                 >
                   Move to trash
@@ -559,66 +643,6 @@ export function App() {
                 ))}
               </select>
             </label>
-            <div className="capture">
-              {!setup.speechReady && <p>Recording will be ready in about a minute. You can type notes now.</p>}
-              {setup.speechReady && !setup.aiReady && <p>You can record now. AI notes will be written when the AI model finishes downloading.</p>}
-              <p>Obtain participant consent before recording.</p>
-              <CaptureFeedback systemAudio={systemAudio} warning={warning?.note_id === note.id && warning.active ? warning.kind : null} onError={fail} />
-              <button
-                disabled={!setup.speechReady || starting || status !== "stopped" || trash}
-                onClick={() => void capture("start_capture").catch(fail)}
-              >
-                {starting ? "Starting…" : "Start capture"}
-              </button>
-              <button
-                disabled={status !== "recording"}
-                onClick={() => void capture("pause_capture").catch(fail)}
-              >
-                Pause
-              </button>
-              <button
-                disabled={status !== "paused"}
-                onClick={() => void capture("resume_capture").catch(fail)}
-              >
-                Resume
-              </button>
-              <button
-                disabled={status === "stopped"}
-                onClick={() => void capture("stop_capture").catch(fail)}
-              >
-                Stop
-              </button>
-              {Object.entries(levels).map(([source, level]) => (
-                <label key={source}>
-                  {source}
-                  <meter min="-100" max="0" value={level} />
-                </label>
-              ))}
-              {notice && (
-                <div>
-                  <p>{notice}</p>
-                  <button onClick={() => void data("copy_notice").catch(fail)}>
-                    Copy notice
-                  </button>
-                </div>
-              )}
-              {autoStop && (
-                <div role="alert">
-                  There has been a long silence. Stop recording?
-                  <button
-                    onClick={() => {
-                      setAutoStop(false);
-                      void capture("stop_capture").catch(fail);
-                    }}
-                  >
-                    Stop recording
-                  </button>
-                  <button onClick={() => setAutoStop(false)}>
-                    Keep recording
-                  </button>
-                </div>
-              )}
-            </div>
             <SnapshotGallery key={`snapshots-${note.id}`} noteId={note.id} onError={fail} onSeek={(ms) => {
               const segment = [...segments].reverse().find((s) => s.start_ms <= ms) ?? segments[0];
               if (segment) document.getElementById(`segment-${segment.seq}`)?.scrollIntoView?.({ behavior: "smooth" });
@@ -684,7 +708,9 @@ export function App() {
                   segments={segments}
                 />
               </div>
-              <Transcript
+              <Transcript key={`transcript-${note.id}`}
+                expiry={expiry} onSettings={() => void data<Preferences>("settings").then(setSettings).catch(fail)}
+                state={starting ? "starting" : captureNote === note.id ? status : "stopped"} finished={finishedNote === note.id} noWords={finishedNote === note.id && !wordsAt} elapsed={captureNote === note.id || finishedNote === note.id ? elapsed : durations[note.id] ?? 0} systemAudio={systemAudio} onRecord={() => void capture("start_capture")}
                 segments={segments}
                 onDelete={(ids) =>
                   void data("delete_segments", { id: note.id, ids })
