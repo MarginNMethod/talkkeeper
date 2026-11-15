@@ -15,6 +15,7 @@ test("meeting snapshots require consent, show count and gallery, delete and keep
   await page.goto("/");
   await page.getByRole("button", { name: "New note", exact: true }).click();
   await page.getByRole("button", { name: "Record more", exact: true }).click();
+  await page.getByRole("button", {name:"Recording options"}).click();
   await page
     .getByRole("button", { name: "Take pictures of my screen", exact: true })
     .click();
@@ -33,9 +34,11 @@ test("meeting snapshots require consent, show count and gallery, delete and keep
   await page
     .getByRole("button", { name: "Start taking pictures", exact: true })
     .click();
+  await page.getByRole("button", {name:"Recording options"}).click();
   await expect(
     page.getByRole("status").filter({ hasText: "Taking screen pictures · 1" }),
   ).toBeVisible();
+  await page.getByRole("tab", {name:"Transcript", exact:true}).click();
   const gallery = page.getByRole("region", {
     name: "Screen pictures",
     exact: true,
@@ -52,6 +55,7 @@ test("meeting snapshots require consent, show count and gallery, delete and keep
     .getByRole("button", { name: "Delete picture at 0:10", exact: true })
     .click();
   await expect(gallery).toHaveCount(0);
+  await page.getByRole("button", {name:"Recording options"}).click();
   await expect(
     page.getByRole("status").filter({ hasText: "Taking screen pictures · 0" }),
   ).toBeVisible();

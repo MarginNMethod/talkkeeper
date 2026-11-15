@@ -5,8 +5,8 @@ import { RecordingConsent } from "./RecordingConsent";
 afterEach(cleanup);
 test("notes tabs switch with click and keyboard and show only one representation", () => {
   render(<NoteWorkspace notes={<p>Rough draft</p>} written={<p>Finished draft</p>} summary="Finished draft" controls={<button>Write up my notes</button>} onEdit={vi.fn()} readOnly={false} />);
-  expect(screen.getByRole("tab", {name:"My notes"}).getAttribute("aria-selected")).toBe("true");
-  fireEvent.keyDown(screen.getByRole("tab", {name:"My notes"}), {key:"ArrowRight"});
+  expect(screen.getByRole("tab", {name:"Notes"}).getAttribute("aria-selected")).toBe("true");
+  fireEvent.keyDown(screen.getByRole("tab", {name:"Notes"}), {key:"ArrowRight"});
   expect(screen.getByRole("tabpanel").textContent).toContain("Finished draft");
   expect(screen.queryByRole("textbox")).toBeNull();
   fireEvent.click(screen.getByRole("button", {name:"Edit"}));
@@ -24,14 +24,14 @@ test("consent waits for explicit confirmation and permits cancellation", () => {
   expect(start).toHaveBeenCalledOnce();
 });
 
-test("a narrow window puts the transcript in a third keyboard-accessible tab", () => {
+test("the transcript follows Notes in the keyboard-accessible tabs", () => {
   const media = vi.spyOn(window, "matchMedia").mockReturnValue({
     matches: true,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
   } as unknown as MediaQueryList);
   render(<NoteWorkspace notes={<p>Draft</p>} written={<p>Summary</p>} summary="" controls={<button>Write up my notes</button>} onEdit={vi.fn()} readOnly={false} transcript={<p>Spoken words</p>} />);
-  fireEvent.keyDown(screen.getByRole("tab", {name:"My notes"}), {key:"End"});
+  fireEvent.keyDown(screen.getByRole("tab", {name:"Notes"}), {key:"ArrowRight"});
   expect(screen.getByRole("tab", {name:"Transcript"}).getAttribute("aria-selected")).toBe("true");
   expect(screen.getByRole("tabpanel").textContent).toBe("Spoken words");
   media.mockRestore();

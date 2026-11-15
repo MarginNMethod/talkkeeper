@@ -1,3 +1,4 @@
+import { EmptyState } from "@talkkeeper/ui";
 import { CopyDiagnostics } from "./CopyDiagnostics";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -122,13 +123,11 @@ export function Transcript({
               <button onClick={onRecord}>Record again</button>
             </>
           ) : !expiry?.deleted_after ? (
-            <>
-              <h3>No transcript yet</h3>
+            <EmptyState title="No transcript yet">
               <p>
-                Press Record and everything that's said will be written here as
-                you go.
+                Your transcript will appear here when you record.
               </p>
-            </>
+            </EmptyState>
           ) : null}
         </div>
       )}

@@ -51,8 +51,8 @@ test.each([
   ["stopped", true, "Record more", "start_capture"],
   ["recording", false, "Stop", "stop_capture"],
   ["paused", false, "Resume", "resume_capture"],
-  ["starting", false, "Starting…", "stop_capture"],
-  ["finishing", false, "Finishing…", "stop_capture"],
+  ["starting", false, "Cancel", "stop_capture"],
+  ["finishing", false, "Stop", "stop_capture"],
 ])("record state %s transcript %s", (state, hasTranscript, name, command) => {
   render(<RecordBar {...base} state={state} hasTranscript={hasTranscript} />);
   const button = screen.getByRole("button", { name }) as HTMLButtonElement;
@@ -269,12 +269,14 @@ test("missing saved microphone uses automatic selection and explains the fallbac
   fireEvent.change(screen.getByLabelText("Meeting microphone"), {target:{value:"USB microphone"}});
   await waitFor(() => expect(invoke).toHaveBeenCalledWith("recording_preferences", {microphone:"USB microphone"}));
   await waitFor(() => expect((screen.getByLabelText("Meeting microphone") as HTMLSelectElement).value).toBe("USB microphone"));
+  expect(screen.getByText("Using: USB microphone")).toBeTruthy();
 });
-test("consent reminder disappears when a take stops", () => {
+test("consent reminder stays reachable when recording another take", () => {
   const view = render(<RecordBar {...base} />);
+  fireEvent.click(screen.getByRole("button", {name:"Recording options"}));
   expect(screen.getByText(/Tell everyone before you record/)).toBeTruthy();
   view.rerender(<RecordBar {...base} finished />);
-  expect(screen.queryByText(/Tell everyone before you record/)).toBeNull();
+  expect(screen.getByText(/Tell everyone before you record/)).toBeTruthy();
 });
 
 test("starting can be cancelled and microphone remains visible", () => {
@@ -283,10 +285,47 @@ test("starting can be cancelled and microphone remains visible", () => {
   expect(cancel.disabled).toBe(false);
   fireEvent.click(cancel);
   expect(base.onCommand).toHaveBeenCalledWith("stop_capture");
+  fireEvent.click(screen.getByRole("button", {name:"Recording options"}));
   expect(screen.getByRole("combobox", { name: "Meeting microphone" })).toBeTruthy();
 });
 test("recording shows the selected microphone", async () => {
   vi.mocked(invoke).mockImplementation(async (command) => command === "current_microphone" ? "MacBook Microphone" : [] as never);
   render(<RecordBar {...base} state="recording" />);
   await screen.findByText("Using: MacBook Microphone");
+});
+
+test("idle is quiet, options disclose source and consent, and stopped meters disappear", () => {
+  const view = render(<RecordBar {...base} levels={{Me:-12}} snapshots={<button>Snapshot options</button>} />);
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByRole("button", {name:"Copy diagnostics"})).toBeNull();
+  expect(view.container.querySelector(".level-bars")).toBeNull();
+  fireEvent.click(screen.getByRole("button",{name:"Recording options"}));
+  expect(screen.getByRole("combobox",{name:"Meeting microphone"})).toBeTruthy();
+  expect(screen.getByText(/Records your microphone only/)).toBeTruthy();
+  expect(screen.getByRole("button",{name:"Snapshot options"})).toBeTruthy();
+  fireEvent.click(screen.getByRole("button",{name:"Copy a message to send them"}));
+  expect(base.onCopyNotice).toHaveBeenCalledOnce();
+});
+test("one warning has diagnostics and can be dismissed without stopping", () => {
+  render(<RecordBar {...base} state="recording" warning="mic_silent" />);
+  expect(screen.getAllByRole("alert")).toHaveLength(1);
+  expect(screen.getByRole("button",{name:"Copy diagnostics"})).toBeTruthy();
+  fireEvent.click(screen.getByRole("button",{name:"Dismiss"}));
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.getByRole("button",{name:"Stop"})).toBeTruthy();
+});
+test("Stop and Cancel remain available when capture prerequisites change", () => {
+  const view = render(<RecordBar {...base} state="recording" speechReady={false} dictating />);
+  fireEvent.click(screen.getByRole("button",{name:"Stop"}));
+  expect(base.onCommand).toHaveBeenCalledWith("stop_capture");
+  view.rerender(<RecordBar {...base} state="starting" speechReady={false} />);
+  fireEvent.click(screen.getByRole("button",{name:"Cancel"}));
+  expect(base.onCommand).toHaveBeenCalledWith("stop_capture");
+});
+test("speech download feedback stays available before speech is ready", () => {
+  render(<RecordBar {...base} speechReady={false} download={{percent:42,done:"42 MB",total:"100 MB",time:"a minute"}} />);
+  expect(screen.getByText(/Downloading speech-to-text/)).toBeTruthy();
+  expect(screen.getByRole("button",{name:"Copy diagnostics"})).toBeTruthy();
+  fireEvent.click(screen.getByRole("button",{name:"Cancel download"}));
+  expect(base.onCommand).toHaveBeenCalledWith("cancel_download");
 });

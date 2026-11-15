@@ -1,5 +1,5 @@
+import { NotePage, NoteHeader, AskBar } from "./NotePage";
 import { RecordingConsent } from "./RecordingConsent";
-import { NoteWorkspace } from "./NoteWorkspace";
 import { Sidebar, type View } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { Home } from "./Home";
@@ -22,20 +22,18 @@ import {
   type Template,
   type Preferences,
 } from "./api";
-import { Editor } from "./Editor";
 import { Transcript } from "./Transcript";
 import { Settings } from "./Settings";
 import { Templates } from "./Templates";
 import { Setup } from "./Setup";
 import { SetupCard } from "./SetupCard";
 import { useSetup } from "./useSetup";
-import { People, Attendees, type Person } from "./People";
+import { People, type Person } from "./People";
 import { WorkspaceChat } from "./WorkspaceChat";
 import { Chat } from "./Chat";
 import { CopyTranscript } from "./CopyTranscript";
-import { SnapshotControls, SnapshotGallery } from "./Snapshots";
+import { SnapshotControls } from "./Snapshots";
 import { RecordBar, RecordingElsewhere } from "./RecordBar";
-import { Summary } from "./Summary";
 export function App() {
   const [notes, setNotes] = useState<Note[]>([]),
     [note, setNote] = useState<Note | null>(null),
@@ -214,6 +212,7 @@ export function App() {
     if (citationSeq !== null && !workspaceChat) {
       const target = document.getElementById(`segment-${citationSeq}`);
       if (target) {
+        window.dispatchEvent(new Event("note:show-transcript"));
         target.scrollIntoView?.({ behavior: "smooth" });
         setCitationSeq(null);
       }
@@ -905,365 +904,252 @@ export function App() {
           ) : view.kind === "space" ? (
             <SpacePage captureNote={captureNote} durations={durations} name={folders.find(f => f.id === view.folder)?.name ?? "All notes"} notes={notes.filter(n => !view.folder || n.folder_id === view.folder)} onOpen={n => void select(n).catch(fail)} />
           ) : view.kind === "note" && note ? (
-            <>
-              {!setup.speechReady && (
-                <p>
-                  Recording will be ready in about a minute. You can type notes
-                  now.
-                </p>
-              )}
-              {setup.speechReady && !setup.aiReady && (
-                <p>
-                  You can record now. AI notes will be written when the AI model
-                  finishes downloading.
-                </p>
-              )}
-              <RecordBar
-                key={`record-${note.id}`}
-                state={
-                  !statusLoaded || (starting && captureNote === note.id)
-                    ? "starting"
-                    : captureNote === note.id
-                      ? status
-                      : "stopped"
-                }
-                elapsed={
-                  captureNote === note.id ||
-                  finishedNote === note.id ||
-                  (captureNote && captureNote !== note.id)
-                    ? elapsed
-                    : (durations[note.id] ?? 0)
-                }
-                hasTranscript={segments.length > 0}
-                finished={finishedNote === note.id}
-                systemAudio={systemAudio}
-                speechSize={speechSize}
-                lag={lag}
-                levels={levels}
-                levelsAt={levelsAt}
-                warning={
-                  warning?.note_id === note.id && warning.active
-                    ? warning.kind
-                    : null
-                }
-                silence={autoStop}
-                error={recordError}
-                errorEnded={failedTakes[note.id] !== undefined}
-                errorElapsed={failedTakes[note.id]}
-                otherTitle={
-                  captureNote && captureNote !== note.id
-                    ? recordingTitle
-                    : undefined
-                }
-                trashed={!!note.deleted_at}
-                dictating={dictating}
-                speechReady={setup.speechReady}
-                wordsAt={wordsAt}
-                onCommand={(command) => void capture(command)}
-                onSettings={() =>
-                  void data<Preferences>("settings")
-                    .then(openSettings)
-                    .catch(fail)
-                }
-                onMicrophone={() =>
-                  void invoke("open_microphone_settings").catch(() =>
-                    data<Preferences>("settings").then(openSettings),
-                  )
-                }
-                onDismissSilence={() => setAutoStop(false)}
-                onRestore={() => void mutate("restore").catch(fail)}
-                onGo={goToRecording}
-                onStopOther={stopOther}
-                onStopDictation={() =>
-                  void invoke("dictation_control", { action: "stop" }).catch(
-                    (e) => setRecordError(String(e)),
-                  )
-                }
-                onCopyNotice={() =>
-                  void data("copy_notice").catch((e) =>
-                    setRecordError(String(e)),
-                  )
-                }
-                onDownload={() => void downloadSpeech()}
-                download={download}
-                downloadReady={downloadReady}
-                snapshots={
-                  <SnapshotControls
-                    noteId={note.id}
-                    status={status}
-                    onError={(e) => setRecordError(String(e))}
-                  />
-                }
-              />
-              <CalendarLink
-                note={note}
-                onError={fail}
-                onOpen={(n) => void select(n).catch(fail)}
-              />
-              <header>
-                <input
-                  className="title"
-                  aria-label="Note title"
-                  value={note.title}
-                  onChange={(e) => update({ title: e.target.value })}
-                />
-                <details>
-                  <summary aria-label="More actions for this note">
-                    More actions
-                  </summary>
-                  {[
-                    ["summary", "Copy summary"],
-                    ["markdown", "Notes and summary"],
-                    ["transcript", "Export transcript"],
-                    [
-                      "csv",
-                      "Save a list of all notes as a spreadsheet file (.csv)",
-                    ],
-                  ].map(([format, label], i) => (
-                    <button
-                      key={label}
-                      onClick={() => void exportNote(format, i < 1).catch(fail)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                  {trash ? (
-                    <>
-                      <button
-                        onClick={() => void mutate("restore").catch(fail)}
-                      >
-                        Restore
-                      </button>
-                      <button
-                        onClick={() => {
-                          setPendingAction("purge");
-                        }}
-                      >
-                        Delete forever
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      disabled={captureNote === note.id}
-                      title={
-                        captureNote === note.id
-                          ? "Stop the recording before moving this note to the trash."
-                          : undefined
-                      }
-                      onClick={() => void mutate("delete").catch(fail)}
-                    >
-                      Move to Trash
-                    </button>
+            <NotePage
+              key={note.id}
+              note={note}
+              segments={segments}
+              readOnly={enhancing || trash}
+              writing={enhancing || setup.writingNote === note.id}
+              update={update}
+              onError={fail}
+              notices={
+                <>
+                  {!setup.speechReady && (
+                    <p>
+                      Recording will be ready in about a minute. You can type notes now.
+                    </p>
                   )}
-                </details>
-              </header>
-              <div className="note-metadata">
-                <time>{new Date(note.created_at).toLocaleString()}</time>
-                <details>
-                  <summary>
-                    {note.attendees.length
-                      ? note.attendees.map((p) => p.name).join(", ")
-                      : "Add people"}
-                  </summary>
-                  <Attendees
-                    key={`attendees-${note.id}`}
-                    value={note.attendees}
-                    onChange={(attendees) => update({ attendees })}
-                    onOpen={(id) =>
-                      void flush()
-                        .then(async () => {
-                          const people = await data<Person[]>("people");
-                          const p = people.find(
-                            (p) =>
-                              p.id === id ||
-                              p.email.toLowerCase() === id.toLowerCase() ||
-                              p.name.toLowerCase() === id.toLowerCase(),
-                          );
-                          if (p) {
-                            setPersonId(p.id);
-                            setView({kind:"people"});
-                          }
-                        })
-                        .catch(fail)
-                    }
-                  />
-                </details>
-                <label>
-                  Folder
-                  <select
-                    value={note.folder_id ?? ""}
-                    onChange={(e) =>
-                      update({ folder_id: e.target.value || null })
-                    }
-                  >
-                    <option value="">No folder</option>
-                    {folders.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <NoteWorkspace
-                key={note.id}
-                notes={
-                  <Editor
-                    content={note.notes_markdown}
-                    document={note.notes_doc}
-                    editable={!enhancing && !trash}
-                    onChange={(notes_doc, notes_markdown) =>
-                      update({ notes_doc, notes_markdown })
-                    }
-                  />
-                }
-                written={
-                  <Summary
-                    markdown={note.summary_markdown ?? ""}
-                    segments={segments}
-                  />
-                }
-                summary={note.summary_markdown ?? ""}
-                onEdit={(value) => update({ summary_markdown: value })}
-                readOnly={enhancing || trash}
-                writing={enhancing || setup.writingNote === note.id}
-                controls={
-                  <>
-                    {setup.writingNote === note.id && (
-                      <p role="status">Writing AI notes…</p>
-                    )}
-                    {!setup.aiReady && (
-                      <p role="status">
-                        {status === "stopped" && segments.length
-                          ? "Recording saved. AI notes for this meeting will be written automatically when the AI model is ready."
-                          : setup.paused
-                            ? "AI notes are waiting. The download is paused."
-                            : setup.status?.ai === "skipped"
-                              ? "AI notes aren't set up on this computer."
-                              : setup.eta === "working out time left…"
-                                ? "AI notes unlock when the download finishes · working out time left…"
-                                : `AI notes will be ready in ${setup.eta.replace(/ left$/, "")}`}
-                      </p>
-                    )}
-                    <div className="summary-tools">
-                      <button
-                        disabled={!setup.aiReady || enhancing || trash}
-                        onClick={() => void enhance()}
-                      >
-                        {enhancing ? "Writing…" : "Write up my notes"}
-                      </button>
-                      <details>
-                        <summary>Summary style</summary>
-                        <label>
-                          Style
-                          <select
-                            value={template}
-                            onChange={(e) => setTemplate(e.target.value)}
-                          >
-                            {templates.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <Templates
-                          templates={templates}
-                          onChange={() =>
-                            void data<Template[]>("templates")
-                              .then(setTemplates)
-                              .catch(fail)
-                          }
-                          onError={fail}
-                        />
-                      </details>
-                    </div>
-                  </>
-                }
-                transcript={
-                  <>
-                    <SnapshotGallery
-                      key={`snapshots-${note.id}`}
+                  {setup.speechReady && !setup.aiReady && (
+                    <p>
+                      You can record now. AI notes will be written when the AI model
+                      finishes downloading.
+                    </p>
+                  )}
+                </>
+              }
+              recording={
+                <RecordBar
+                  key={`record-${note.id}`}
+                  state={
+                    !statusLoaded || (starting && captureNote === note.id)
+                      ? "starting"
+                      : captureNote === note.id
+                        ? status
+                        : "stopped"
+                  }
+                  elapsed={
+                    captureNote === note.id ||
+                    finishedNote === note.id ||
+                    (captureNote && captureNote !== note.id)
+                      ? elapsed
+                      : (durations[note.id] ?? 0)
+                  }
+                  hasTranscript={segments.length > 0}
+                  finished={finishedNote === note.id}
+                  noWords={finishedNote === note.id && !wordsAt}
+                  systemAudio={systemAudio}
+                  speechSize={speechSize}
+                  lag={lag}
+                  levels={levels}
+                  levelsAt={levelsAt}
+                  warning={
+                    warning?.note_id === note.id && warning.active ? warning.kind : null
+                  }
+                  silence={autoStop}
+                  error={recordError}
+                  errorEnded={failedTakes[note.id] !== undefined}
+                  errorElapsed={failedTakes[note.id]}
+                  otherTitle={
+                    captureNote && captureNote !== note.id ? recordingTitle : undefined
+                  }
+                  trashed={!!note.deleted_at}
+                  dictating={dictating}
+                  speechReady={setup.speechReady}
+                  wordsAt={wordsAt}
+                  onCommand={(command) => void capture(command)}
+                  onSettings={() =>
+                    void data<Preferences>("settings").then(openSettings).catch(fail)
+                  }
+                  onMicrophone={() =>
+                    void invoke("open_microphone_settings").catch(() =>
+                      data<Preferences>("settings").then(openSettings),
+                    )
+                  }
+                  onDismissSilence={() => setAutoStop(false)}
+                  onRestore={() => void mutate("restore").catch(fail)}
+                  onGo={goToRecording}
+                  onStopOther={stopOther}
+                  onStopDictation={() =>
+                    void invoke("dictation_control", { action: "stop" }).catch((e) =>
+                      setRecordError(String(e)),
+                    )
+                  }
+                  onCopyNotice={() =>
+                    void data("copy_notice").catch((e) => setRecordError(String(e)))
+                  }
+                  onDownload={() => void downloadSpeech()}
+                  download={download}
+                  downloadReady={downloadReady}
+                  snapshots={
+                    <SnapshotControls
                       noteId={note.id}
-                      onError={fail}
-                      onSeek={(ms) => {
-                        const segment =
-                          [...segments]
-                            .reverse()
-                            .find((s) => s.start_ms <= ms) ?? segments[0];
-                        if (segment)
-                          document
-                            .getElementById(`segment-${segment.seq}`)
-                            ?.scrollIntoView?.({ behavior: "smooth" });
-                      }}
+                      status={captureNote === note.id ? status : "stopped"}
+                      onError={(e) => setRecordError(String(e))}
                     />
-                    <Transcript
-                      key={`transcript-${note.id}`}
-                      expiry={expiry}
-                      onSettings={() =>
-                        void data<Preferences>("settings")
-                          .then(openSettings)
-                          .catch(fail)
-                      }
-                      state={
-                        starting
-                          ? "starting"
-                          : captureNote === note.id
-                            ? status
-                            : "stopped"
-                      }
-                      finished={finishedNote === note.id}
-                      noWords={finishedNote === note.id && !wordsAt}
-                      elapsed={
-                        captureNote === note.id || finishedNote === note.id
-                          ? elapsed
-                          : (durations[note.id] ?? 0)
-                      }
-                      systemAudio={systemAudio}
-                      onRecord={() => void capture("start_capture")}
-                      segments={segments}
-                      onDelete={(ids) =>
-                        void data("delete_segments", { id: note.id, ids })
-                          .then(() =>
-                            setSegments((s) =>
-                              s.filter((x) => !ids.includes(x.id)),
-                            ),
-                          )
-                          .catch(fail)
-                      }
-                      onCopy={
-                        <CopyTranscript note={note} segments={segments} />
-                      }
-                    />
-                  </>
-                }
-              />
-              <details className="note-question">
-                <summary>Ask about this note</summary>
-                {setup.aiReady ? (
-                  <Chat
-                    onSettings={() =>
-                      void data<Preferences>("settings")
-                        .then(openSettings)
-                        .catch(fail)
-                    }
-                    key={note.id}
-                    locked={enhancing}
-                    note={note}
-                    segments={segments}
-                    beforeRequest={flush}
-                    onNote={(n) => {
-                      if (current.current?.id !== n.id) return;
-                      current.current = n;
-                      setNote(n);
-                      void refresh().catch(fail);
-                    }}
-                  />
-                ) : (
-                  <p>Available when the AI model finishes downloading.</p>
-                )}
-              </details>
-            </>
+                  }
+                />
+              }
+              calendar={
+                <CalendarLink
+                  note={note}
+                  onError={fail}
+                  onOpen={(n) => void select(n).catch(fail)}
+                />
+              }
+              header={
+                <NoteHeader
+                  note={note}
+                  folders={folders}
+                  update={update}
+                  recording={captureNote === note.id}
+                  canEnhance={setup.aiReady && !enhancing && !trash}
+                  onEnhance={() => void enhance()}
+                  onExport={(format, copy) => void exportNote(format, copy).catch(fail)}
+                  onRestore={() => void mutate("restore").catch(fail)}
+                  onTrash={() => void mutate("delete").catch(fail)}
+                  onPurge={() => setPendingAction("purge")}
+                  onOpen={(id) =>
+                    void flush()
+                      .then(async () => {
+                        const people = await data<Person[]>("people");
+                        const p = people.find(
+                          (p) =>
+                            p.id === id ||
+                            p.email.toLowerCase() === id.toLowerCase() ||
+                            p.name.toLowerCase() === id.toLowerCase(),
+                        );
+                        if (p) {
+                          setPersonId(p.id);
+                          setView({ kind: "people" });
+                        }
+                      })
+                      .catch(fail)
+                  }
+                />
+              }
+              controls={
+                <>
+                  {setup.writingNote === note.id && (
+                    <p role="status">Writing AI notes…</p>
+                  )}
+                  {!setup.aiReady && (
+                    <p role="status">
+                      {status === "stopped" && segments.length
+                        ? "Recording saved. AI notes for this meeting will be written automatically when the AI model is ready."
+                        : setup.paused
+                          ? "AI notes are waiting. The download is paused."
+                          : setup.status?.ai === "skipped"
+                            ? "AI notes aren't set up on this computer."
+                            : setup.eta === "working out time left…"
+                              ? "AI notes unlock when the download finishes · working out time left…"
+                              : `AI notes will be ready in ${setup.eta.replace(/ left$/, "")}`}
+                    </p>
+                  )}
+                  <div className="summary-tools">
+                    <button
+                      disabled={!setup.aiReady || enhancing || trash}
+                      onClick={() => void enhance()}
+                    >
+                      {enhancing ? "Writing…" : "Write up my notes"}
+                    </button>
+                    <details>
+                      <summary>Summary style</summary>
+                      <label>
+                        Style
+                        <select
+                          value={template}
+                          onChange={(e) => setTemplate(e.target.value)}
+                        >
+                          {templates.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <Templates
+                        templates={templates}
+                        onChange={() =>
+                          void data<Template[]>("templates")
+                            .then(setTemplates)
+                            .catch(fail)
+                        }
+                        onError={fail}
+                      />
+                    </details>
+                  </div>
+                </>
+              }
+              transcript={
+                <Transcript
+                  key={`transcript-${note.id}`}
+                  expiry={expiry}
+                  onSettings={() =>
+                    void data<Preferences>("settings").then(openSettings).catch(fail)
+                  }
+                  state={
+                    starting ? "starting" : captureNote === note.id ? status : "stopped"
+                  }
+                  finished={finishedNote === note.id}
+                  noWords={finishedNote === note.id && !wordsAt}
+                  elapsed={
+                    captureNote === note.id || finishedNote === note.id
+                      ? elapsed
+                      : (durations[note.id] ?? 0)
+                  }
+                  systemAudio={systemAudio}
+                  onRecord={() => void capture("start_capture")}
+                  segments={segments}
+                  onDelete={(ids) =>
+                    void data("delete_segments", { id: note.id, ids })
+                      .then(() =>
+                        setSegments((s) => s.filter((x) => !ids.includes(x.id))),
+                      )
+                      .catch(fail)
+                  }
+                  onCopy={<CopyTranscript note={note} segments={segments} />}
+                />
+              }
+              chat={
+                <AskBar key={`ask-${note.id}`}>
+                  {(question) =>
+                    setup.aiReady ? (
+                      <Chat
+                        initialQuestion={question}
+                        onSettings={() =>
+                          void data<Preferences>("settings")
+                            .then(openSettings)
+                            .catch(fail)
+                        }
+                        key={note.id}
+                        locked={enhancing}
+                        note={note}
+                        segments={segments}
+                        beforeRequest={flush}
+                        onNote={(n) => {
+                          if (current.current?.id !== n.id) return;
+                          current.current = n;
+                          setNote(n);
+                          void refresh().catch(fail);
+                        }}
+                      />
+                    ) : (
+                      <p>Available when the AI model finishes downloading.</p>
+                    )
+                  }
+                </AskBar>
+              }
+            />
           ) : (
             <section className="empty">
               <h2>A place to collect the conversation</h2>

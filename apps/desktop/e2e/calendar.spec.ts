@@ -24,11 +24,11 @@ test("add a private calendar and start linked notes", async ({ page }) => {
     page.getByText("Calendar planning", { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Start notes", exact: true }).click();
-  await expect(page.locator("input.title")).toHaveValue("Calendar planning");
+  await expect(page.getByLabel("Note title", {exact:true})).toHaveValue("Calendar planning");
   await expect(page.getByLabel("Linked calendar event")).toContainText(
     "Calendar planning",
   );
-  await page.locator(".note-metadata > details > summary").click();
+  await page.locator(".note-metadata").getByRole("button").click();
   await expect(
     page.getByRole("combobox", { name: "Who was there" }),
   ).toHaveValue("Alex <alex@example.test>");

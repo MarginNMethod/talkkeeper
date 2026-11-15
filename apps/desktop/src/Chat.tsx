@@ -29,7 +29,9 @@ export function Chat({
   onNote,
   onSettings,
   locked = false,
+  initialQuestion = "",
 }: {
+  initialQuestion?: string;
   note: Note;
   segments: Segment[];
   beforeRequest: () => Promise<void>;
@@ -40,7 +42,7 @@ export function Chat({
 }) {
   const [messages, setMessages] = useState<Message[]>([]),
     [versions, setVersions] = useState<Version[]>([]),
-    [question, setQuestion] = useState("");
+    [question, setQuestion] = useState(initialQuestion);
   const [busy, setBusy] = useState(false),
     [stream, setStream] = useState(""),
     [error, setError] = useState(""),
@@ -52,6 +54,7 @@ export function Chat({
     edit: boolean;
   } | null>(null);
   const [revision, setRevision] = useState(false);
+  useEffect(() => { if (initialQuestion) setQuestion(initialQuestion); }, [initialQuestion]);
   async function reload() {
     setMessages((await data<Message[]>("chat_history", { id: note.id })) ?? []);
     setVersions((await data<Version[]>("versions", { id: note.id })) ?? []);

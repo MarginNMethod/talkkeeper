@@ -26,7 +26,7 @@ afterEach(() => {
   cleanup();
   vi.resetAllMocks();
 });
-test("silent microphone guidance opens settings and clears; microphone-only note persists", async () => {
+test("silent microphone guidance opens settings and clears without routine feedback", async () => {
   vi.mocked(invoke).mockResolvedValue(undefined);
   const props = { systemAudio: false, warning: "mic_silent", onError: vi.fn() };
   const view = render(<CaptureFeedback {...props} />);
@@ -40,8 +40,8 @@ test("silent microphone guidance opens settings and clears; microphone-only note
   view.rerender(<CaptureFeedback {...props} warning={null} />);
   expect(screen.queryByRole("alert")).toBeNull();
   expect(
-    screen.getByText(/This build records your microphone only/),
-  ).toBeTruthy();
+    screen.queryByText(/This build records your microphone only/),
+  ).toBeNull();
   view.rerender(
     <CaptureFeedback {...props} systemAudio={true} warning={null} />,
   );
@@ -84,6 +84,7 @@ test("first recording requires consent and prevents double start until the comma
   });
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: "New note" }));
+  fireEvent.click(await screen.findByRole("tab", {name:"Summary"}));
   expect(await screen.findAllByRole("button", {name:"Write up my notes"})).toHaveLength(1);
   expect(screen.queryByRole("button", {name:/Enhance|Redo/})).toBeNull();
   fireEvent.click(await screen.findByRole("button", { name: "Record" }));
@@ -94,7 +95,7 @@ test("first recording requires consent and prevents double start until the comma
   fireEvent.click(screen.getByRole("button", {name:"Record"}));
   fireEvent.click(await screen.findByRole("button", {name:"Start recording"}));
   await waitFor(() => expect(invoke).toHaveBeenCalledWith("recording_preferences", {consent:true}));
-  const pending = await screen.findByRole("button", { name: "Starting…" });
+  const pending = await screen.findByRole("button", { name: "Cancel" });
   expect((pending as HTMLButtonElement).disabled).toBe(false);
   await waitFor(() => expect(finish).toBeTruthy());
   fireEvent.click(pending);

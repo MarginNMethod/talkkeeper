@@ -118,3 +118,8 @@ test("summary citation ranges expose each supporting segment", () => {
   fireEvent.click(screen.getByText("Source 2"));
   expect(screen.getByText(/Second evidence/)).toBeTruthy();
 });
+
+test("an empty transcript explains how recording fills it", () => {
+  render(<Transcript segments={[]} onDelete={vi.fn()} onCopy={null} />);
+  expect(screen.getByText("Your transcript will appear here when you record.")).toBeTruthy();
+});

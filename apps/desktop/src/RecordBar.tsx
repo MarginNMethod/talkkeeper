@@ -1,3 +1,4 @@
+import { Popover } from "@talkkeeper/ui";
 import { CopyDiagnostics } from "./CopyDiagnostics";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { invoke, type Preferences, data } from "./api";
@@ -79,6 +80,7 @@ export interface RecordBarProps {
   elapsed: number;
   hasTranscript: boolean;
   finished: boolean;
+  noWords?: boolean;
   systemAudio: boolean;
   speechSize?: string;
   lag?: number;
@@ -114,12 +116,19 @@ export interface RecordBarProps {
   snapshots?: ReactNode;
 }
 export function RecordBar(p: RecordBarProps) {
+  const [dismissedProblem, setDismissedProblem] = useState("");
   const [devices, setDevices] = useState<string[]>([]);
   const [usingMicrophone, setUsingMicrophone] = useState("");
   useEffect(() => {
     let mounted = true;
-    void invoke<string | null>("current_microphone").then(name => { if (mounted && typeof name === "string") setUsingMicrophone(name); }).catch(() => {});
-    return () => { mounted = false; };
+    void invoke<string | null>("current_microphone")
+      .then((name) => {
+        if (mounted && typeof name === "string") setUsingMicrophone(name);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
   }, [p.state]);
   const [microphone, setMicrophone] = useState("");
   const [deviceMessage, setDeviceMessage] = useState("");
@@ -128,22 +137,32 @@ export function RecordBar(p: RecordBarProps) {
     void Promise.all([
       invoke<string[]>("list_input_devices"),
       data<Preferences>("settings"),
-    ]).then(([available, prefs]) => {
-      if (!mounted) return;
-      setDevices(available);
-      const saved = prefs.meeting_microphone ?? "";
-      setMicrophone(available.includes(saved) ? saved : "");
-      if (saved && !available.includes(saved))
-        setDeviceMessage("Your saved microphone is unavailable. Using automatic microphone selection.");
-    }).catch(() => {
-      if (mounted) setDeviceMessage("Microphones couldn't be listed. Using automatic microphone selection.");
-    });
-    return () => { mounted = false; };
+    ])
+      .then(([available, prefs]) => {
+        if (!mounted) return;
+        setDevices(available);
+        const saved = prefs.meeting_microphone ?? "";
+        setMicrophone(available.includes(saved) ? saved : "");
+        if (saved && !available.includes(saved))
+          setDeviceMessage(
+            "Your saved microphone is unavailable. Using automatic microphone selection.",
+          );
+      })
+      .catch(() => {
+        if (mounted)
+          setDeviceMessage(
+            "Microphones couldn't be listed. Using automatic microphone selection.",
+          );
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
   async function changeMicrophone(device: string) {
     try {
       await invoke("recording_preferences", { microphone: device });
       setMicrophone(device);
+      setUsingMicrophone(device);
       setDeviceMessage("");
     } catch {
       setDeviceMessage("Your microphone choice couldn't be saved. Try again.");
@@ -169,6 +188,7 @@ export function RecordBar(p: RecordBarProps) {
   useEffect(() => {
     if (p.state === "starting" || p.state === "stopped") {
       setDismissed([]);
+      setDismissedProblem("");
       setSoundTime(0);
       started.current = Date.now();
       lastSound.current = null;
@@ -193,7 +213,8 @@ export function RecordBar(p: RecordBarProps) {
       lastSound.current = p.elapsed;
   }, [now, p.state, p.levels.Me]);
   const active = p.state === "recording" || p.state === "paused";
-  const blocked = p.trashed || !!p.otherTitle || p.dictating || p.speechReady === false;
+  const blocked =
+    p.trashed || !!p.otherTitle || p.dictating || p.speechReady === false;
   const label =
     p.state === "starting"
       ? "Starting…"
@@ -206,14 +227,13 @@ export function RecordBar(p: RecordBarProps) {
             : p.hasTranscript || p.finished
               ? "Record more"
               : "Record";
-  const command =
-    ["recording", "starting", "finishing"].includes(p.state)
-      ? "stop_capture"
-      : p.state === "paused"
-        ? "resume_capture"
-        : "start_capture";
+  const command = ["recording", "starting", "finishing"].includes(p.state)
+    ? "stop_capture"
+    : p.state === "paused"
+      ? "resume_capture"
+      : "start_capture";
   const main = () => {
-    if (!blocked)
+    if (active || p.state === "starting" || p.state === "finishing" || !blocked)
       p.onCommand(command);
   };
   const mainRef = useRef(main);
@@ -269,6 +289,7 @@ export function RecordBar(p: RecordBarProps) {
     warning = null;
   if (behind) warning = "behind";
   if (p.silence) warning = "long_silence";
+  if (p.noWords) warning = "ended_no_words";
   const problem = p.error
     ? describeRecordingError(
         p.error,
@@ -284,109 +305,138 @@ export function RecordBar(p: RecordBarProps) {
       aria-label="Recording controls"
     >
       <div className="record-row">
-        <button
-          className={`record-main ${p.state === "recording" ? "is-stop" : ""} ${(p.hasTranscript || p.finished) && !active ? "is-more" : ""}`}
-          title="Ctrl/Cmd+Shift+R"
-          disabled={
-            !!blocked
-          }
-          onClick={main}
-        >
-          <span aria-hidden="true">
-            {["starting", "finishing"].includes(p.state)
-              ? "◌"
-              : p.state === "recording"
-                ? "■"
-                : "●"}
-          </span>{" "}
-          {blocked ? "Record" : label}
-        </button>
-        {(
-          <label className="meeting-microphone">
-            Microphone
-            <select aria-label="Meeting microphone" value={microphone} disabled={p.state !== "stopped"}
-              onChange={event => void changeMicrophone(event.target.value)}>
-              <option value="">Automatic microphone</option>
-              {devices.map(device => <option key={device}>{device}</option>)}
-            </select>
-          </label>
-        )}
-        {p.state !== "stopped" && <span>Using: {usingMicrophone || microphone || "Selecting microphone…"}</span>}
-        {active && !blocked && (
+        {active ? (
           <>
             <span
               className={`record-dot ${p.state === "paused" ? "paused" : ""}`}
             />
             <time className="record-timer">{recordingTime(p.elapsed)}</time>
-            <Level
-              label="Microphone"
-              value={
-                p.state === "paused" || now - (p.levelsAt ?? now) > 1000
-                  ? -100
-                  : (p.levels.Me ?? -100)
-              }
-            />
-            {p.systemAudio && (
+            {p.state === "recording" && (
               <Level
-                label="Computer sound"
+                label="Microphone"
                 value={
-                  p.state === "paused" || now - (p.levelsAt ?? now) > 1000
+                  now - (p.levelsAt ?? now) > 1000
                     ? -100
-                    : (p.levels.Them ?? -100)
+                    : (p.levels.Me ?? -100)
                 }
               />
             )}
+            <button
+              onClick={() =>
+                p.onCommand(
+                  p.state === "paused" ? "resume_capture" : "pause_capture",
+                )
+              }
+            >
+              {p.state === "paused" ? "Resume" : "Pause"}
+            </button>
+            <button
+              className="record-stop"
+              onClick={() => p.onCommand("stop_capture")}
+            >
+              Stop
+            </button>
           </>
+        ) : p.state === "starting" || p.state === "finishing" ? (
+          <>
+            <span role="status">
+              <span className="record-spinner" aria-hidden="true">
+                ◌
+              </span>{" "}
+              {label}
+            </span>
+            {p.state === "finishing" && (
+              <progress aria-label="Finishing recording" />
+            )}
+            <button onClick={() => p.onCommand("stop_capture")}>
+              {p.state === "starting" ? "Cancel" : "Stop"}
+            </button>
+          </>
+        ) : (
+          <button
+            className="record-main"
+            title="Ctrl/Cmd+Shift+R"
+            disabled={!!blocked}
+            onClick={main}
+          >
+            <span aria-hidden="true">●</span> {blocked ? "Record" : label}
+          </button>
         )}
-        <div className="record-sentence">
-          <span role="status" aria-live="polite">
-            {sentence}
+        <Popover label="Recording options" keepMounted closeOnAction={false}>
+          <label className="meeting-microphone">
+            Microphone
+            <select
+              aria-label="Meeting microphone"
+              value={microphone}
+              disabled={p.state !== "stopped"}
+              onChange={(event) => void changeMicrophone(event.target.value)}
+            >
+              <option value="">Automatic microphone</option>
+              {devices.map((device) => (
+                <option key={device}>{device}</option>
+              ))}
+            </select>
+          </label>
+          <span>
+            Using:{" "}
+            {usingMicrophone ||
+              microphone ||
+              (p.state === "stopped"
+                ? "Automatic microphone"
+                : "Selecting microphone…")}
           </span>
-          {!active && !blocked && !p.finished && p.state === "stopped" && (
-            <div>
+
+          <p>
               Tell everyone before you record.{" "}
               <button onClick={p.onCopyNotice}>
                 Copy a message to send them
               </button>
-            </div>
-          )}
-        </div>
-        {p.state === "recording" && !blocked && (
-          <button onClick={() => p.onCommand("pause_capture")}>Pause</button>
-        )}
-        {p.state === "paused" && !blocked && (
-          <button onClick={() => p.onCommand("stop_capture")}>Stop</button>
-        )}
-        {p.state === "starting" && (
-          <button onClick={() => p.onCommand("stop_capture")}>Cancel</button>
-        )}
-        {active && !blocked && p.snapshots}
-        {p.trashed && <button onClick={p.onRestore}>Restore note</button>}
-        {p.otherTitle && (
-          <>
-            <button onClick={p.onGo}>Go to that note</button>
-            <button onClick={p.onStopOther}>Stop it</button>
-          </>
-        )}
-        {p.dictating && (
-          <button onClick={p.onStopDictation}>Stop dictation</button>
-        )}
-      </div>
-      {deviceMessage && <p role="status">{deviceMessage} <CopyDiagnostics /></p>}
-      {!blocked && (
-        <>
+            </p>
           <p className="record-source">
-            {active
-              ? "Recording your microphone"
-              : p.systemAudio
-                ? "Records your microphone and your computer's sound."
-                : "Records your microphone only. On a call, use your speakers instead of headphones so the other people are picked up."}
+            {p.systemAudio
+              ? "Records your microphone and your computer's sound."
+              : "Records your microphone only. On a call, use your speakers instead of headphones so the other people are picked up."}
           </p>
+          {p.snapshots}
+        </Popover>
+      </div>
+      <span className={blocked ? "record-blocked" : "sr-only"} role="status">
+        {sentence}
+      </span>
+      {p.trashed && <button onClick={p.onRestore}>Restore note</button>}
+      {p.otherTitle && (
+        <>
+          <button onClick={p.onGo}>Go to that note</button>
+          <button onClick={p.onStopOther}>Stop it</button>
+        </>
+      )}
+      {p.dictating && (
+        <button onClick={p.onStopDictation}>Stop dictation</button>
+      )}
+      {deviceMessage &&
+        !warning &&
+        !problem &&
+        !p.download &&
+        !p.downloadReady && (
+          <p role="status">
+            {deviceMessage} <CopyDiagnostics />
+            <button onClick={() => setDeviceMessage("")}>Dismiss</button>
+          </p>
+        )}
+      {!p.otherTitle && (
+        <div className="record-feedback">
           <CaptureFeedback
             lag={p.lag}
             systemAudio={p.systemAudio}
             warning={
-              warning && !dismissed.includes(warning) && active ? warning : null
+              !problem &&
+              !p.download &&
+              !p.downloadReady &&
+              warning &&
+              !dismissed.includes(warning) &&
+              (active || p.noWords)
+                ? warning
+                : null
             }
             onError={() => p.onSettings()}
             onMicrophone={p.onMicrophone}
@@ -398,50 +448,68 @@ export function RecordBar(p: RecordBarProps) {
               p.onDismissSilence();
             }}
           />
-          {problem && !p.download && !p.downloadReady && (
-            <div className="record-problem" role="alert">
-              <strong>{problem.title}</strong>
-              <CopyDiagnostics />
-              <p>{problem.body}</p>
-              <button
-                onClick={
-                  problem.action === "Open microphone settings"
-                    ? p.onMicrophone
-                    : problem.action === "Open Settings"
-                      ? p.onSettings
-                      : problem.action === "Download now"
-                        ? p.onDownload
-                        : () => p.onCommand("start_capture")
-                }
-              >
-                {problem.action}
-              </button>
-              {problem.action === "Download now" && (
-                <button onClick={p.onSettings}>Open Settings</button>
-              )}
-              {problem.action === "Open microphone settings" && (
-                <button onClick={() => p.onCommand("start_capture")}>
-                  Try again
-                </button>
-              )}
-              {(p.errorEnded ?? p.finished) && p.error.includes("overflow") && (
-                <button onClick={p.onSettings}>Speech settings</button>
-              )}
-              <details>
-                <summary>Details</summary>
-                <pre>{p.error}</pre>
+          {problem &&
+            dismissedProblem !== p.error &&
+            !p.download &&
+            !p.downloadReady && (
+              <div className="record-problem" role="alert">
                 <button
-                  onClick={() =>
-                    void data("copy_text", { text: p.error }).catch(() => {})
+                  className="banner-dismiss"
+                  aria-label="Dismiss recording problem"
+                  onClick={() => setDismissedProblem(p.error)}
+                >
+                  ×
+                </button>
+                <strong>{problem.title}</strong>
+                <CopyDiagnostics />
+                <p>{problem.body}</p>
+                <button
+                  onClick={
+                    problem.action === "Open microphone settings"
+                      ? p.onMicrophone
+                      : problem.action === "Open Settings"
+                        ? p.onSettings
+                        : problem.action === "Download now"
+                          ? p.onDownload
+                          : () => p.onCommand("start_capture")
                   }
                 >
-                  Copy details
+                  {problem.action}
                 </button>
-              </details>
-            </div>
-          )}
-          {p.download && (
+                {problem.action === "Download now" && (
+                  <button onClick={p.onSettings}>Open Settings</button>
+                )}
+                {problem.action === "Open microphone settings" && (
+                  <button onClick={() => p.onCommand("start_capture")}>
+                    Try again
+                  </button>
+                )}
+                {(p.errorEnded ?? p.finished) &&
+                  p.error.includes("overflow") && (
+                    <button onClick={p.onSettings}>Speech settings</button>
+                  )}
+                <details>
+                  <summary>Details</summary>
+                  <pre>{p.error}</pre>
+                  <button
+                    onClick={() =>
+                      void data("copy_text", { text: p.error }).catch(() => {})
+                    }
+                  >
+                    Copy details
+                  </button>
+                </details>
+              </div>
+            )}
+          {p.download && dismissedProblem !== "download" && (
             <div role="status">
+              <CopyDiagnostics />
+              <button
+                aria-label="Dismiss download progress"
+                onClick={() => setDismissedProblem("download")}
+              >
+                ×
+              </button>
               <strong>
                 Downloading speech-to-text… {p.download.percent} %
               </strong>
@@ -455,13 +523,20 @@ export function RecordBar(p: RecordBarProps) {
               </button>
             </div>
           )}
-          {p.downloadReady && (
+          {p.downloadReady && dismissedProblem !== "ready" && (
             <div role="status">
+              <CopyDiagnostics />
+              <button
+                aria-label="Dismiss speech ready"
+                onClick={() => setDismissedProblem("ready")}
+              >
+                ×
+              </button>
               <strong>Speech-to-text is ready</strong>
               <p>Press Record to start.</p>
             </div>
           )}
-        </>
+        </div>
       )}
     </section>
   );
