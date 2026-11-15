@@ -30,7 +30,22 @@ impl ModelManager {
     pub async fn is_present(&self, model: &Model) -> Result<bool> {
         let path = self.path(model);
         match tokio::fs::metadata(&path).await {
-            Ok(meta) if meta.len() == model.size => Ok(hash_file(&path).await? == model.sha256),
+            Ok(meta) if meta.len() == model.size => {
+                let marker = verification_marker(&meta, model)?;
+                if tokio::fs::read_to_string(path.with_extension("verified"))
+                    .await
+                    .ok()
+                    .as_deref()
+                    == Some(&marker)
+                {
+                    return Ok(true);
+                }
+                if hash_file(&path).await? != model.sha256 {
+                    return Ok(false);
+                }
+                tokio::fs::write(path.with_extension("verified"), marker).await?;
+                Ok(true)
+            }
             Ok(_) => Ok(false),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
             Err(e) => Err(e.into()),
@@ -78,11 +93,29 @@ impl ModelManager {
             file.sync_all().await?;
             drop(file);
             tokio::fs::rename(&*temp, self.path(model)).await?;
+            let meta = tokio::fs::metadata(self.path(model)).await?;
+            tokio::fs::write(
+                self.path(model).with_extension("verified"),
+                verification_marker(&meta, model)?,
+            )
+            .await?;
             Ok(self.path(model))
         }
         .await;
         result
     }
+}
+fn verification_marker(meta: &std::fs::Metadata, model: &Model) -> Result<String> {
+    let modified = meta
+        .modified()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| Error::Audio(e.to_string()))?;
+    Ok(format!(
+        "{}:{}:{}",
+        meta.len(),
+        modified.as_nanos(),
+        model.sha256
+    ))
 }
 async fn hash_file(path: &Path) -> Result<String> {
     let mut file = tokio::fs::File::open(path).await?;
@@ -140,7 +173,7 @@ mod tests {
         ));
         assert_eq!(
             std::fs::read_dir(path.parent().unwrap()).unwrap().count(),
-            1
+            2
         );
     }
 }

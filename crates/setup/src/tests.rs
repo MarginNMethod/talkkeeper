@@ -170,9 +170,50 @@ fn bundled_speech_tiers_are_multilingual() {
         assert!(!tier.whisper.model.ends_with(".en"));
         let expected = match tier.min_ram_gb {
             0 => "tiny",
-            8 => "small",
-            _ => "large-v3-turbo",
+            8 => "base",
+            _ => "small",
         };
         assert_eq!(tier.whisper.model, expected);
     }
+}
+
+#[tokio::test]
+async fn verified_speech_ready_precedes_a_later_ai_verification_failure() {
+    let external = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/version"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"version":"stub"})))
+        .mount(&external)
+        .await;
+    let (_dir, setup, _server) = fixture(Some(external.uri())).await;
+    let mut plan = setup.plan().unwrap();
+    plan.total_download_bytes = 100;
+    Mock::given(method("GET"))
+        .and(path("/api/tags"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"models":[{"name":plan.llm.ollama_tag}]})),
+        )
+        .mount(&external)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/api/chat"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&external)
+        .await;
+    let speech_ready = std::sync::atomic::AtomicBool::new(false);
+    let result = setup
+        .run_setup(
+            &plan,
+            |progress| {
+                if progress.stage == Stage::Verify && progress.completed == 0 {
+                    assert!(setup.directory.join("models/speech.bin").exists());
+                    speech_ready.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            },
+            CancellationToken::new(),
+        )
+        .await;
+    assert!(matches!(result, Err(Error::Verify)));
+    assert!(speech_ready.load(std::sync::atomic::Ordering::Relaxed));
 }

@@ -123,6 +123,8 @@ mockIPC(async (command, args) => {
     if (a.action === "add") calendarAdded = true;
     return { count: 1 };
   }
+  if (command === "capture_capabilities") return { system_audio: false };
+  if (command === "open_microphone_settings") return;
   if (command === "start_capture") { captureNote = String(a.noteId); emit("capture://state", { note_id: captureNote, state: "recording" }); return; }
   if (command === "snapshot_ai_status") return { supports_images: false, cloud: false, confirmed: true };
   if (command === "snapshot_control") {

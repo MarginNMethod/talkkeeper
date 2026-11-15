@@ -65,6 +65,9 @@ pub async fn setup_run(
             .run_setup(
                 &plan,
                 |p| {
+                    if let Err(error) = record_speech_ready(&state.store, &plan.whisper.model, &p) {
+                        let _ = app.emit("setup://error", error);
+                    }
                     let _ = app.emit("setup://progress", p);
                 },
                 token,
@@ -147,4 +150,70 @@ pub fn shutdown(app: &tauri::AppHandle) {
     if let Ok(mut runtime) = state.runtime.lock() {
         runtime.take();
     };
+}
+
+fn record_speech_ready(
+    store: &Mutex<Store>,
+    model: &str,
+    progress: &talkkeeper_setup::Progress,
+) -> Result<()> {
+    // Verify starts only after the downloaded speech model passes integrity checks.
+    if progress.stage != talkkeeper_setup::Stage::Verify || progress.completed != 0 {
+        return Ok(());
+    }
+    let mut store = store.lock().map_err(err)?;
+    let mut prefs = preferences(&store)?;
+    prefs["stt_engine"] = json!("local");
+    prefs["stt_model"] = json!(model);
+    store.set_setting("preferences", &prefs).map_err(err)
+}
+#[cfg(test)]
+mod recording_tests {
+    use super::*;
+    #[test]
+    fn speech_preferences_survive_later_setup_failure() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("setup.sqlite");
+        let store = Mutex::new(Store::open(&path).unwrap());
+        store
+            .lock()
+            .unwrap()
+            .set_setting("preferences", &json!({"language":"fr"}))
+            .unwrap();
+        let result: Result<()> = (|| {
+            record_speech_ready(
+                &store,
+                "base",
+                &talkkeeper_setup::Progress::new(
+                    talkkeeper_setup::Stage::DownloadSpeechModel,
+                    1,
+                    1,
+                    "Downloading",
+                ),
+            )?;
+            assert!(preferences(&store.lock().unwrap())?["stt_model"].is_null());
+            record_speech_ready(
+                &store,
+                "base",
+                &talkkeeper_setup::Progress::new(
+                    talkkeeper_setup::Stage::Verify,
+                    0,
+                    1,
+                    "Verifying",
+                ),
+            )?;
+            Err("AI verification failed".into())
+        })();
+        assert!(result.is_err());
+        drop(store);
+        let store = Store::open(&path).unwrap();
+        let prefs = preferences(&store).unwrap();
+        assert_eq!(prefs["stt_model"], "base");
+        assert_eq!(prefs["stt_engine"], "local");
+        assert_eq!(prefs["language"], "fr");
+        assert_ne!(
+            store.get_setting("setup.completed").unwrap(),
+            Some(json!(true))
+        );
+    }
 }

@@ -25,8 +25,8 @@
       "notes": "Open model weights. Download sizes are estimates; speed depends on available memory and graphics hardware."
     },
     "whisper": {
-      "model": "small",
-      "approx_download_mb": 487.6
+      "model": "base",
+      "approx_download_mb": 147.9
     }
   },
   {
@@ -40,8 +40,8 @@
       "notes": "Open model weights. Download sizes are estimates; speed depends on available memory and graphics hardware."
     },
     "whisper": {
-      "model": "large-v3-turbo",
-      "approx_download_mb": 1624.6
+      "model": "small",
+      "approx_download_mb": 487.6
     }
   },
   {
@@ -55,8 +55,8 @@
       "notes": "Open model weights. Download sizes are estimates; speed depends on available memory and graphics hardware."
     },
     "whisper": {
-      "model": "large-v3-turbo",
-      "approx_download_mb": 1624.6
+      "model": "small",
+      "approx_download_mb": 487.6
     }
   },
   {
@@ -70,8 +70,8 @@
       "notes": "Open model weights. Download sizes are estimates; speed depends on available memory and graphics hardware."
     },
     "whisper": {
-      "model": "large-v3-turbo",
-      "approx_download_mb": 1624.6
+      "model": "small",
+      "approx_download_mb": 487.6
     }
   }
 ]

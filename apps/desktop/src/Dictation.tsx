@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { MicrophoneSettingsButton } from "./CaptureFeedback";
 import { data, invoke, type Preferences } from "./api";
 export const voice = <T,>(action: string, payload: unknown = {}) =>
   invoke<T>("dictation_data", { action, payload });
@@ -255,6 +256,7 @@ export function DictationSettings({ prefs }: { prefs: Preferences }) {
         </button>
       )}
       {notice && <p role="status">{notice}</p>}
+      {notice.toLowerCase().includes("microphone") && <MicrophoneSettingsButton onError={fail} />}
       <h3>Dictation history</h3>
       <input
         aria-label="Search dictation history"
@@ -333,6 +335,7 @@ export function DictationNotice() {
   return notice ? (
     <div role="alert">
       {notice}
+      {notice.toLowerCase().includes("microphone") && <MicrophoneSettingsButton onError={e => setNotice(String(e))} />}
       {text && (
         <button
           onClick={() =>
