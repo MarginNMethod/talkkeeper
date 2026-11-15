@@ -10,3 +10,6 @@ apps/desktop/src-tauri/gen/
 
 # Opt-in redesign visual captures
 apps/desktop/e2e/screenshots/
+
+# Browser test output
+test-results/

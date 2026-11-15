@@ -49,7 +49,7 @@ export function Popover({ label, children }: { label: string; children: ReactNod
     return () => { document.removeEventListener('keydown', key); document.removeEventListener('pointerdown', outside); };
   }, [open]);
   return <div ref={root} className="tk-popover">
-    <button type="button" className="tk-button tk-button--quiet tk-button--md" ref={trigger} aria-expanded={open} aria-controls={open ? id : undefined} aria-haspopup="dialog" onClick={() => setOpen(!open)}>{label}</button>
-    {open && <div ref={panel} id={id} role="dialog" aria-label={label} tabIndex={-1} className="tk-popover-panel">{children}</div>}
+    <button type="button" className="tk-button tk-button--quiet tk-button--md" ref={trigger} aria-label={label} aria-expanded={open} aria-controls={open ? id : undefined} aria-haspopup="dialog" onClick={() => setOpen(!open)}>{label}</button>
+    {open && <div ref={panel} id={id} role="dialog" aria-label={label} tabIndex={-1} className="tk-popover-panel" onClick={event => { if ((event.target as Element).closest("button")) setOpen(false); }}>{children}</div>}
   </div>;
 }
