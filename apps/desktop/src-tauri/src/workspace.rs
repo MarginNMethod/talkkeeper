@@ -288,6 +288,7 @@ mod tests {
             store: Arc::new(Mutex::new(store)),
             directory: std::env::temp_dir(),
             capture: Mutex::new(None),
+            recording_diagnostics: Mutex::new(crate::session::RecordingDiagnostics::default()),
             snapshots: Mutex::new(snapshots::SnapshotSession::default()),
             clipboard: Mutex::new(None),
         };

@@ -164,7 +164,7 @@ impl Capture {
                     Err(error) => {
                         let _ = ready_tx.send(Err(error));
                     }
-                    Ok((_mic, mut system)) => {
+                    Ok((mic, mut system)) => {
                         // Suppress buffers until all requested sources are initialized.
                         if output
                             .state
@@ -179,6 +179,13 @@ impl Capture {
                             let _ =
                                 ready_tx.send(Err(backend("capture failed during initialization")));
                             return;
+                        }
+                        if let Some(mic) = &mic {
+                            if let Err(error) = mic.play() {
+                                output.state.store(2, Ordering::Release);
+                                let _ = ready_tx.send(Err(backend(error)));
+                                return;
+                            }
                         }
                         let _ = ready_tx.send(Ok(()));
                         while output.state() != CaptureState::Stopped {
@@ -196,8 +203,13 @@ impl Capture {
                 }
             })
             .map_err(backend)?;
-        if let Err(error) = ready_rx.recv().map_err(backend)? {
-            let _ = worker.join();
+        if let Err(error) = wait_ready(&ready_rx, Duration::from_secs(8)) {
+            emitter.state.store(2, Ordering::Release);
+            // A backend may be stuck inside OS initialization. Detach it; the
+            // stopped flag prevents it from starting a stream when it returns.
+            if worker.is_finished() {
+                let _ = worker.join();
+            }
             return Err(error);
         }
         Ok(CaptureHandle {
@@ -207,6 +219,57 @@ impl Capture {
             worker: Some(worker),
         })
     }
+}
+fn wait_ready(rx: &std::sync::mpsc::Receiver<Result<()>>, timeout: Duration) -> Result<()> {
+    rx.recv_timeout(timeout).map_err(|_| {
+        backend("The microphone didn't respond within 8 seconds. Choose a different microphone and try again.")
+    })?
+}
+
+/// Resolve an explicit choice first; macOS otherwise prefers physical built-in input.
+pub fn select_microphone(
+    saved: Option<&str>,
+    devices: &[String],
+    default: Option<&str>,
+    macos: bool,
+) -> Option<String> {
+    if let Some(saved) = saved.filter(|s| !s.is_empty() && devices.iter().any(|d| d == s)) {
+        return Some(saved.to_owned());
+    }
+    if macos {
+        if let Some(device) = devices.iter().find(|name| {
+            let n = name.to_lowercase();
+            !["iphone", "ipad", "continuity", "aggregate", "virtual"]
+                .iter()
+                .any(|s| n.contains(s))
+                && [
+                    "macbook",
+                    "built-in",
+                    "built in",
+                    "mac mini",
+                    "imac",
+                    "studio display",
+                ]
+                .iter()
+                .any(|s| n.contains(s))
+        }) {
+            return Some(device.clone());
+        }
+    }
+    default.map(str::to_owned)
+}
+pub fn default_input_device() -> Option<String> {
+    cpal::default_host()
+        .default_input_device()
+        .and_then(|d| d.name().ok())
+}
+pub fn selected_input_device(saved: Option<&str>) -> Result<Option<String>> {
+    Ok(select_microphone(
+        saved,
+        &list_input_devices()?,
+        default_input_device().as_deref(),
+        cfg!(target_os = "macos"),
+    ))
 }
 impl CaptureHandle {
     pub fn state(&self) -> CaptureState {
@@ -249,7 +312,8 @@ pub fn list_input_devices() -> Result<Vec<String>> {
 }
 fn microphone(config: &CaptureConfig, output: Emitter) -> Result<cpal::Stream> {
     let host = cpal::default_host();
-    let device = if let Some(name) = &config.mic_device {
+    let selected = selected_input_device(config.mic_device.as_deref())?;
+    let device = if let Some(name) = &selected {
         host.input_devices()
             .map_err(backend)?
             .find(|d| d.name().ok().as_ref() == Some(name))
@@ -272,7 +336,6 @@ fn microphone(config: &CaptureConfig, output: Emitter) -> Result<cpal::Stream> {
         cpal::SampleFormat::F64 => mic_stream::<f64>(&device, &config, output),
         _ => Err(backend("unsupported microphone sample format")),
     }?;
-    stream.play().map_err(backend)?;
     Ok(stream)
 }
 fn mic_stream<T>(
@@ -373,6 +436,57 @@ pub fn authorize_microphone() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn microphone_selection() {
+        let devices = vec![
+            "Alex iPhone Microphone".into(),
+            "MacBook Pro Microphone".into(),
+            "Virtual Built-in".into(),
+        ];
+        let phone = Some("Alex iPhone Microphone");
+        for saved in [None, Some(""), Some("Disconnected")] {
+            assert_eq!(
+                select_microphone(saved, &devices, phone, true).as_deref(),
+                Some("MacBook Pro Microphone")
+            );
+        }
+        for excluded in [
+            "iPad Built-in",
+            "Continuity Built-in",
+            "Virtual Built-in",
+            "Aggregate Built-in",
+        ] {
+            assert_eq!(
+                select_microphone(None, &[excluded.into()], None, true),
+                None
+            );
+        }
+        assert_eq!(select_microphone(None, &[], None, true), None);
+        assert_eq!(
+            select_microphone(None, &devices, phone, true).as_deref(),
+            Some("MacBook Pro Microphone")
+        );
+        assert_eq!(
+            select_microphone(None, &devices[..1], phone, true).as_deref(),
+            phone
+        );
+        assert_eq!(
+            select_microphone(phone, &devices, phone, true).as_deref(),
+            phone
+        );
+        assert_eq!(
+            select_microphone(None, &devices, phone, false).as_deref(),
+            phone
+        );
+    }
+    #[test]
+    fn never_ready_times_out() {
+        let (_tx, rx) = std::sync::mpsc::channel();
+        assert!(wait_ready(&rx, Duration::from_millis(10))
+            .unwrap_err()
+            .to_string()
+            .contains("didn't respond"));
+    }
     #[test]
     fn mixes_channels() {
         assert_eq!(downmix(&[1., -1., 0.5, 0.25, 9.], 2), vec![0., 0.375]);
