@@ -19,6 +19,7 @@ test("create, write, enhance, search and export a note", async ({ page }) => {
   await page
     .getByRole("textbox", { name: "Your notes" })
     .fill("Discuss the garden plan");
+  await page.getByRole("tab", {name:"Summary", exact:true}).click();
   await page
     .getByRole("button", { name: "Write up my notes", exact: true })
     .click();
@@ -34,7 +35,7 @@ test("create, write, enhance, search and export a note", async ({ page }) => {
     page.getByRole("button", { name: /Garden conversation/ }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
-  await page.getByText("More actions", { exact: true }).click();
+  await page.getByRole("button", {name:"More actions for this note"}).click();
   await page
     .getByRole("button", { name: "Notes and summary", exact: true })
     .click();

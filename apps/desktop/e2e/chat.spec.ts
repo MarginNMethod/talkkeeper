@@ -14,6 +14,7 @@ test("copy transcript, propose a shorter note, apply and undo", async ({
   });
   await page.goto("/");
   await page.getByRole("button", { name: "New note", exact: true }).click();
+  await page.getByRole("tab", {name:"Summary", exact:true}).click();
   await page
     .getByRole("button", { name: "Write up my notes", exact: true })
     .click();
@@ -24,6 +25,7 @@ test("copy transcript, propose a shorter note, apply and undo", async ({
   await expect(
     page.getByRole("textbox", { name: "Edit written-up notes" }),
   ).toHaveValue(/Proceed with the garden plan/);
+  await page.getByRole("tab", {name:"Transcript", exact:true}).click();
   await page
     .getByRole("button", { name: "Copy transcript", exact: true })
     .first()
@@ -31,7 +33,8 @@ test("copy transcript, propose a shorter note, apply and undo", async ({
   await expect(
     page.getByRole("status").filter({ hasText: "Copied 7 words" }),
   ).toBeVisible();
-  await page.getByText("Ask about this note", { exact: true }).click();
+  await page.getByRole("tab", {name:"Summary", exact:true}).click();
+  await page.getByRole("button", {name:"Ask about this note"}).click();
   const chat = page.getByRole("region", { name: "Chat with this note" });
   await chat
     .getByLabel("Message", { exact: true })

@@ -40,6 +40,7 @@ test("one click opens a note; speech and AI unlock independently and Settings pr
   await expect(
     page.getByRole("button", { name: "Record", exact: true }),
   ).toBeEnabled();
+  await page.getByRole("tab", {name:"Summary",exact:true}).click();
   await expect(
     page.getByRole("button", { name: "Write up my notes", exact: true }),
   ).toBeDisabled();
@@ -52,6 +53,7 @@ test("one click opens a note; speech and AI unlock independently and Settings pr
   await page.evaluate(() =>
     (window as unknown as { finishSetup: () => void }).finishSetup(),
   );
+  await page.getByRole("tab", {name:"Summary",exact:true}).click();
   await expect(
     page.getByRole("button", { name: "Write up my notes", exact: true }),
   ).toBeEnabled();

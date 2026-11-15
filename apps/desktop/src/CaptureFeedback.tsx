@@ -103,7 +103,7 @@ export function describeRecordingError(
 }
 export function CaptureFeedback({
   lag = 0,
-  systemAudio,
+  systemAudio: _systemAudio,
   warning,
   onError,
   onMicrophone,
@@ -122,15 +122,15 @@ export function CaptureFeedback({
 }) {
   return (
     <>
-      {!systemAudio && (
-        <p className="record-mic-only">
-          This build records your microphone only. Other people are picked up
-          only if your microphone can hear them.
-        </p>
-      )}
       {warning && (
         <div role={warning === "long_silence" ? "status" : "alert"} className="record-warning">
           <CopyDiagnostics />
+          {warning === "ended_no_words" && <>
+            <strong>No words were picked up</strong>
+            <p>Check your microphone, then try again. Your notes are saved.</p>
+            <button onClick={onRestart}>Record again</button>
+            <button onClick={onDismiss}>Dismiss</button>
+          </>}
           {warning === "mic_silent" && (
             <>
               <strong>We can't hear anything</strong>

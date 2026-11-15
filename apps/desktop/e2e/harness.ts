@@ -61,6 +61,8 @@ function emit(event: string, payload: unknown) {
       payload: structuredClone(payload),
     });
 }
+// Visual fixtures can deliver the same events as the native capture service.
+window.addEventListener("mock:capture-warning", () => emit("capture://warning", {note_id: captureNote, kind: "mic_silent", active: true}));
 mockIPC(async (command, args) => {
   const a = args as Record<string, unknown>;
   if (command === "plugin:event|listen") {
@@ -544,7 +546,12 @@ mockIPC(async (command, args) => {
       case "speech_models":
         return [];
       case "list":
-        return structuredClone(notes);
+        return structuredClone(notes.filter(n => !n.deleted_at));
+      case "trash":
+        return structuredClone(notes.filter(n => n.deleted_at));
+      case "delete":
+        notes = notes.map(n => n.id === p.id ? {...n, deleted_at: new Date().toISOString()} : n);
+        return null;
       case "templates":
         return [{ id: "auto", name: "Auto" }];
       case "folders":

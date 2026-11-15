@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { data, invoke, type Preferences } from "./api";
@@ -126,8 +127,8 @@ export function SnapshotControls({
           </button>
         </>
       )}
-      {picking && (
-        <div role="dialog" aria-label="Which window or screen?">
+      {picking && createPortal(
+        <div className="snapshot-consent" role="dialog" aria-label="Which window or screen?">
           <p>
             Snapshots can contain private messages, documents, and other
             people's information. Choose one window where possible and obtain
@@ -178,7 +179,7 @@ export function SnapshotControls({
             Start taking pictures
           </button>
           <button onClick={() => setPicking(false)}>Cancel pictures</button>
-        </div>
+        </div>, document.body
       )}
     </section>
   );

@@ -10,23 +10,24 @@ export function NoteWorkspace({ notes, written, controls, summary, onEdit, readO
   writing?: boolean;
   transcript?: ReactNode;
 }) {
-  const [narrow, setNarrow] = useState(() => window.matchMedia("(max-width: 899px)").matches);
-  useEffect(() => {
-    const query = window.matchMedia("(max-width: 899px)");
-    const change = () => { setNarrow(query.matches); setTab(current => current === 2 ? 0 : current); };
-    query.addEventListener("change", change);
-    return () => query.removeEventListener("change", change);
-  }, []);
-  const labels = narrow && transcript ? ["My notes", "Written-up notes", "Transcript"] : ["My notes", "Written-up notes"];
+  const labels = transcript ? ["Notes", "Transcript", "Summary"] : ["Notes", "Summary"];
+  const summaryTab = transcript ? 2 : 1;
   const [tab, setTab] = useState(0);
   const [editing, setEditing] = useState(false);
   const id = useId();
-  useEffect(() => { if (writing) { setTab(1); setEditing(false); } }, [writing]);
+  useEffect(() => { if (writing) { setTab(summaryTab); setEditing(false); } }, [writing, summaryTab]);
+  useEffect(() => {
+    const reveal = () => { if (location.hash.startsWith("#segment-") || transcript) setTab(1); };
+    const hash = () => { if (location.hash.startsWith("#segment-")) setTab(1); };
+    window.addEventListener("hashchange", hash);
+    window.addEventListener("note:show-transcript", reveal);
+    return () => { window.removeEventListener("hashchange", hash); window.removeEventListener("note:show-transcript", reveal); };
+  }, [transcript]);
   return (
     <div className="columns note-work-area"><section className="note-workspace">
       <div role="tablist" aria-label="Note views">
         {labels.map((label, i) => (
-          <button key={label} id={`${id}-tab-${i}`} role="tab"
+          <button key={label} id={`${id}-tab-${i}`} role="tab" aria-label={label}
             aria-selected={tab === i} aria-controls={`${id}-panel-${i}`}
             tabIndex={tab === i ? 0 : -1} onClick={() => setTab(i)}
             onKeyDown={event => {
@@ -36,21 +37,21 @@ export function NoteWorkspace({ notes, written, controls, summary, onEdit, readO
               setTab(next);
               document.getElementById(`${id}-tab-${next}`)?.focus();
             }}>
-            {label}{i === 1 && summary ? " •" : ""}
+            {label}{i === summaryTab && summary ? " •" : ""}
           </button>
         ))}
       </div>
-      {controls}
       <div id={`${id}-panel-0`} role="tabpanel" aria-labelledby={`${id}-tab-0`} hidden={tab !== 0}>{notes}</div>
-      <div id={`${id}-panel-1`} role="tabpanel" aria-labelledby={`${id}-tab-1`} hidden={tab !== 1}>
+      <div id={`${id}-panel-${summaryTab}`} role="tabpanel" aria-labelledby={`${id}-tab-${summaryTab}`} hidden={tab !== summaryTab}>
+        {controls}
         <button disabled={readOnly} onClick={() => setEditing(!editing)}>{editing ? "Done editing" : "Edit"}</button>
         {editing
           ? <textarea aria-label="Edit written-up notes" value={summary} readOnly={readOnly} onChange={event => onEdit(event.target.value)} />
           : written}
       </div>
-      {narrow && transcript && <div id={`${id}-panel-2`} role="tabpanel" aria-labelledby={`${id}-tab-2`} hidden={tab !== 2}>{transcript}</div>}
+      {transcript && <div id={`${id}-panel-1`} role="tabpanel" aria-labelledby={`${id}-tab-1`} hidden={tab !== 1}>{transcript}</div>}
     </section>
-    {!narrow && transcript && <div className="note-transcript-zone">{transcript}</div>}
+
     </div>
   );
 }

@@ -29,7 +29,7 @@ export function EmptyState({ title, children, action, ...props }: Omit<HTMLAttri
   return <section {...props} className={`tk-empty-state ${props.className ?? ''}`}><h3>{title}</h3>{children && <div>{children}</div>}{action}</section>;
 }
 /** Non-modal disclosure: Tab follows document order; Escape/outside click dismiss. */
-export function Popover({ label, children }: { label: string; children: ReactNode }) {
+export function Popover({ label, children, keepMounted = false, closeOnAction = true }: { label: string; children: ReactNode; keepMounted?: boolean; closeOnAction?: boolean }) {
   const [open, setOpen] = useState(false);
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -50,6 +50,6 @@ export function Popover({ label, children }: { label: string; children: ReactNod
   }, [open]);
   return <div ref={root} className="tk-popover">
     <button type="button" className="tk-button tk-button--quiet tk-button--md" ref={trigger} aria-label={label} aria-expanded={open} aria-controls={open ? id : undefined} aria-haspopup="dialog" onClick={() => setOpen(!open)}>{label}</button>
-    {open && <div ref={panel} id={id} role="dialog" aria-label={label} tabIndex={-1} className="tk-popover-panel" onClick={event => { if ((event.target as Element).closest("button")) setOpen(false); }}>{children}</div>}
+    {(open || keepMounted) && <div hidden={!open} ref={panel} id={id} role="dialog" aria-label={label} tabIndex={-1} className="tk-popover-panel" onClick={event => { if (closeOnAction && (event.target as Element).closest("button")) setOpen(false); }}>{children}</div>}
   </div>;
 }
