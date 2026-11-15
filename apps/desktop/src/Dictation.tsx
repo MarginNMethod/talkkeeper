@@ -4,7 +4,7 @@ import { MicrophoneSettingsButton } from "./CaptureFeedback";
 import { data, invoke, type Preferences } from "./api";
 export const voice = <T,>(action: string, payload: unknown = {}) =>
   invoke<T>("dictation_data", { action, payload });
-interface Config {
+export interface Config {
   hotkey: string;
   mode: string;
   style: string;
@@ -27,7 +27,13 @@ const defaults: Config = {
   replacements: [],
   prompts: {},
 };
-export function DictationSettings({ prefs }: { prefs: Preferences }) {
+export function DictationSettings({
+  prefs,
+  onChange,
+}: {
+  prefs: Preferences;
+  onChange?: (config: Config) => void;
+}) {
   const [config, setConfig] = useState(defaults);
   const [history, setHistory] = useState<Entry[]>([]);
   const [search, setSearch] = useState("");
@@ -59,8 +65,11 @@ export function DictationSettings({ prefs }: { prefs: Preferences }) {
       void unlisten.then((f) => f());
     };
   }, [search]);
-  const update = (patch: Partial<Config>) =>
-    setConfig((c) => ({ ...c, ...patch }));
+  const update = (patch: Partial<Config>) => {
+    const next = { ...config, ...patch };
+    setConfig(next);
+    onChange?.(next);
+  };
   return (
     <section aria-label="Voice typing">
       <h3>Voice typing</h3>
@@ -70,19 +79,26 @@ export function DictationSettings({ prefs }: { prefs: Preferences }) {
       </p>
       <p>
         {prefs.stt_engine === "cloud"
-          ? "Cloud speech: audio goes to your selected STT endpoint."
-          : "Speech is processed locally."}{" "}
+          ? "Your audio is sent to your chosen online service."
+          : "Speech is processed on this computer."}{" "}
         {![undefined, "Automatic", "Ollama"].includes(prefs.provider)
-          ? "Cloud AI: styled dictation goes to your selected AI provider."
+          ? "Your spoken text is sent to your chosen online AI service."
           : prefs.provider === "Ollama"
-            ? `Styled text goes to your Ollama endpoint: ${prefs.base_url ?? "http://localhost:11434"}.`
-            : "AI cleanup uses your local engine."}
+            ? "Your spoken text goes to the AI program you run yourself."
+            : "AI tidying runs on this computer."}
       </p>
       <label>
-        Dictation hotkey
+        Keyboard shortcut
         <input
-          value={config.hotkey}
-          onChange={(e) => update({ hotkey: e.target.value })}
+          value={config.hotkey.replace(
+            "CommandOrControl",
+            /Mac/.test(navigator.platform) ? "⌘" : "Ctrl",
+          )}
+          onChange={(e) =>
+            update({
+              hotkey: e.target.value.replace(/^(Ctrl|⌘)/, "CommandOrControl"),
+            })
+          }
           onKeyDown={(e) => {
             if (
               !(e.ctrlKey || e.metaKey || e.altKey) ||
@@ -104,23 +120,34 @@ export function DictationSettings({ prefs }: { prefs: Preferences }) {
         />
       </label>
       <label>
-        Talk mode
+        How the shortcut works
         <select
           value={config.mode}
           onChange={(e) => update({ mode: e.target.value })}
         >
-          <option value="toggle">Press to start / press to stop</option>
-          <option value="hold">Hold to talk</option>
+          <option value="toggle">Press once to start, again to stop</option>
+          <option value="hold">Hold down while speaking</option>
         </select>
       </label>
       <label>
-        Dictation style
+        Tidy up what I say
         <select
           value={config.style}
           onChange={(e) => update({ style: e.target.value })}
         >
           {["As spoken", "Clean", "Formal", "Bullet points"].map((s) => (
-            <option key={s}>{s}</option>
+            <option key={s} value={s}>
+              {
+                (
+                  {
+                    "As spoken": "Type exactly what I say",
+                    Clean: "Clean up",
+                    Formal: "Make it formal",
+                    "Bullet points": "Turn into bullet points",
+                  } as Record<string, string>
+                )[s]
+              }
+            </option>
           ))}
         </select>
       </label>
@@ -148,13 +175,13 @@ export function DictationSettings({ prefs }: { prefs: Preferences }) {
           checked={config.cues}
           onChange={(e) => update({ cues: e.target.checked })}
         />
-        Start and stop cues
+        Play a sound when starting and stopping
       </label>
-      <h4>Dictionary replacements</h4>
+      <h4>Words to replace</h4>
       {config.replacements.map((r, i) => (
         <div key={i}>
           <input
-            aria-label={`Spoken phrase ${i + 1}`}
+            aria-label={`When I say ${i + 1}`}
             value={r.from}
             onChange={(e) =>
               update({
@@ -196,27 +223,40 @@ export function DictationSettings({ prefs }: { prefs: Preferences }) {
         Add replacement
       </button>
       <label>
-        Dictation history retention days (0 disables history)
-        <input
-          type="number"
-          min="0"
-          max="36500"
+        Keep voice typing history for
+        <select
           value={config.days}
           onChange={(e) => update({ days: Number(e.target.value) })}
-        />
+        >
+          {[
+            [0, "Don't keep"],
+            [7, "7 days"],
+            [30, "30 days"],
+            [365, "1 year"],
+          ].map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+          {![0, 7, 30, 365].includes(config.days) && (
+            <option value={config.days}>{config.days} days</option>
+          )}
+        </select>
       </label>
-      <button
-        onClick={() =>
-          void voice("save", config)
-            .then(() => {
-              setNotice("Dictation settings saved");
-              void refresh();
-            })
-            .catch(fail)
-        }
-      >
-        Save dictation settings
-      </button>
+      {!onChange && (
+        <button
+          onClick={() =>
+            void voice("save", config)
+              .then(() => {
+                setNotice("Voice typing settings saved");
+                void refresh();
+              })
+              .catch(fail)
+          }
+        >
+          Save voice typing settings
+        </button>
+      )}
       <button
         onClick={() =>
           void voice<typeof permissions>("permissions")
@@ -224,10 +264,10 @@ export function DictationSettings({ prefs }: { prefs: Preferences }) {
             .catch(fail)
         }
       >
-        Check permissions
+        Check it can work
       </button>
       {permissions && (
-        <div aria-label="Dictation permissions">
+        <div aria-label="Voice typing permissions">
           <p>{permissions.microphone}</p>
           <p>{permissions.paste}</p>
           <p>Microphones: {permissions.devices.join(", ") || "None found"}</p>
@@ -241,7 +281,7 @@ export function DictationSettings({ prefs }: { prefs: Preferences }) {
           }).catch(fail)
         }
       >
-        Try dictation
+        Try voice typing
       </button>
       {notice.includes("Meeting capture") && (
         <button
@@ -252,26 +292,28 @@ export function DictationSettings({ prefs }: { prefs: Preferences }) {
             }).catch(fail)
           }
         >
-          Confirm dictation alongside meeting capture
+          Use voice typing while recording a meeting
         </button>
       )}
       {notice && <p role="status">{notice}</p>}
-      {notice.toLowerCase().includes("microphone") && <MicrophoneSettingsButton onError={fail} />}
-      <h3>Dictation history</h3>
+      {notice.toLowerCase().includes("microphone") && (
+        <MicrophoneSettingsButton onError={fail} />
+      )}
+      <h3>What you have said</h3>
       <input
-        aria-label="Search dictation history"
+        aria-label="Search what you have said"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
       <button
         onClick={() => {
-          if (window.confirm("Delete all dictation history?"))
+          if (window.confirm("Delete all voice typing history?"))
             void voice("clear").then(refresh).catch(fail);
         }}
       >
-        Clear dictation history
+        Delete all spoken text
       </button>
-      {history.length === 0 && <p>No dictations found.</p>}
+      {history.length === 0 && <p>Nothing yet.</p>}
       <ul>
         {history.map((entry) => (
           <li key={entry.id}>
@@ -282,14 +324,14 @@ export function DictationSettings({ prefs }: { prefs: Preferences }) {
                 void data("copy_text", { text: entry.text }).catch(fail)
               }
             >
-              Copy dictation
+              Copy spoken text
             </button>
             <button
               onClick={() =>
                 void voice("delete", { id: entry.id }).then(refresh).catch(fail)
               }
             >
-              Delete dictation
+              Delete spoken text
             </button>
           </li>
         ))}
@@ -335,17 +377,19 @@ export function DictationNotice() {
   return notice ? (
     <div role="alert">
       {notice}
-      {notice.toLowerCase().includes("microphone") && <MicrophoneSettingsButton onError={e => setNotice(String(e))} />}
+      {notice.toLowerCase().includes("microphone") && (
+        <MicrophoneSettingsButton onError={(e) => setNotice(String(e))} />
+      )}
       {text && (
         <button
           onClick={() =>
             void data("copy_text", { text }).catch((e) => setNotice(String(e)))
           }
         >
-          Copy last dictation
+          Copy last spoken text
         </button>
       )}
-      <button onClick={() => setNotice("")}>Dismiss dictation notice</button>
+      <button onClick={() => setNotice("")}>Dismiss voice typing notice</button>
     </div>
   ) : null;
 }
@@ -386,7 +430,10 @@ export function DictationIndicator() {
     };
   }, []);
   return (
-    <section className="dictation-indicator" aria-label="Dictation indicator">
+    <section
+      className="dictation-indicator"
+      aria-label="Voice typing indicator"
+    >
       {cue && (
         <span key={state} className="dictation-cue" aria-hidden="true">
           ●
@@ -396,8 +443,8 @@ export function DictationIndicator() {
         {state === "listening"
           ? "Listening…"
           : state === "preparing"
-            ? "Preparing…"
-            : "Writing…"}
+            ? "Getting ready…"
+            : "Typing…"}
       </p>
       <meter min="-100" max="0" value={level} />
       <button

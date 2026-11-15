@@ -20,7 +20,7 @@ test("add a private calendar and start linked notes", async ({ page }) => {
   await expect(page.getByText("Calendar saved on this computer")).toBeVisible();
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await page
-    .getByRole("button", { name: "Today & upcoming", exact: true })
+    .getByRole("button", { name: "Today", exact: true })
     .click();
   await expect(
     page.getByText("Calendar planning", { exact: true }),
@@ -30,7 +30,7 @@ test("add a private calendar and start linked notes", async ({ page }) => {
   await expect(page.getByLabel("Linked calendar event")).toContainText(
     "Calendar planning",
   );
-  await expect(page.getByRole("combobox", { name: "Attendees" })).toHaveValue(
+  await expect(page.getByRole("combobox", { name: "Who was there" })).toHaveValue(
     "Alex <alex@example.test>",
   );
 });

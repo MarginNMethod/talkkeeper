@@ -73,12 +73,12 @@ test("calendar settings clear the secret after saving and expose opt-in preferen
   expect(
     (
       screen.getByLabelText(
-        "Start capture automatically when a meeting begins",
+        "Start recording automatically when a meeting begins",
       ) as HTMLInputElement
     ).checked,
   ).toBe(false);
   expect(reminder.checked).toBe(false);
   fireEvent.click(reminder);
   expect(change).toHaveBeenCalledWith("calendar_reminders", true);
-  expect(screen.getByText(/Your cloud provider will receive/)).toBeTruthy();
+  expect(screen.getByText(/Your online service will receive/)).toBeTruthy();
 });

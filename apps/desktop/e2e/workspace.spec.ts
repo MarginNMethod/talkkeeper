@@ -17,7 +17,7 @@ test("create, write, enhance, search and export a note", async ({ page }) => {
     .getByRole("textbox", { name: "Note title" })
     .fill("Garden conversation");
   await page
-    .getByRole("textbox", { name: "Rough notes" })
+    .getByRole("textbox", { name: "Your notes" })
     .fill("Discuss the garden plan");
   await page.getByRole("button", { name: "Enhance", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Edit summary" })).toHaveValue(
@@ -31,7 +31,7 @@ test("create, write, enhance, search and export a note", async ({ page }) => {
   ).toBeVisible();
   await page.getByText("Export", { exact: true }).click();
   await page
-    .getByRole("button", { name: "Export Markdown", exact: true })
+    .getByRole("button", { name: "Notes and summary", exact: true })
     .click();
   await expect
     .poll(() =>
@@ -55,17 +55,11 @@ test("selected notes answer with a citation; recipe result saves as a note", asy
   await page.getByLabel("Note title", { exact: true }).fill("Garden planning");
   await page.getByRole("button", { name: "New note", exact: true }).click();
   await page.getByLabel("Note title", { exact: true }).fill("Garden follow-up");
+  await page.getByRole("button", { name: "Ask your notes", exact: true }).click();
+  await page.getByLabel("Which notes?", { exact: true }).selectOption("selected");
   await page.getByLabel("Select note Garden planning", { exact: true }).check();
-  await page
-    .getByLabel("Select note Garden follow-up", { exact: true })
-    .check();
-  await page
-    .getByRole("button", { name: "Ask your notes", exact: true })
-    .click();
-  await page
-    .getByLabel("Choose scope", { exact: true })
-    .selectOption("selected");
-  await expect(page.getByLabel("Scope chips")).toContainText(
+  await page.getByLabel("Select note Garden follow-up", { exact: true }).check();
+  await expect(page.getByLabel("Notes included")).toContainText(
     "2 notes included",
   );
   await page
@@ -73,7 +67,7 @@ test("selected notes answer with a citation; recipe result saves as a note", asy
     .fill("What was approved for the garden?");
   await page.getByRole("button", { name: "Ask", exact: true }).click();
   await expect(
-    page.getByText("Searched 2 notes / 2 segments and sections; retrieved 2."),
+    page.getByText("Searched 2 notes / 2 lines and sections; retrieved 2."),
   ).toBeVisible();
   await page.getByRole("link", { name: "[Garden planning · 1:30]" }).click();
   await expect(page.getByLabel("Note title", { exact: true })).toHaveValue(
@@ -83,8 +77,8 @@ test("selected notes answer with a citation; recipe result saves as a note", asy
   await page
     .getByRole("button", { name: "Ask your notes", exact: true })
     .click();
-  await page.getByLabel("Recipe", { exact: true }).selectOption("recipe-1");
-  await page.getByRole("button", { name: "Run recipe", exact: true }).click();
+  await page.getByLabel("Saved question", { exact: true }).selectOption("recipe-1");
+  await page.getByRole("button", { name: "Run question", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Save as note", exact: true }),
   ).toBeEnabled();
@@ -93,6 +87,6 @@ test("selected notes answer with a citation; recipe result saves as a note", asy
     "Recipe result",
   );
   await expect(
-    page.getByRole("textbox", { name: "Rough notes", exact: true }),
+    page.getByRole("textbox", { name: "Your notes", exact: true }),
   ).toContainText("Garden approved");
 });

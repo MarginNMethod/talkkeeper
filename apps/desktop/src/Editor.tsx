@@ -32,7 +32,7 @@ export function Editor({
     contentType: document && typeof document === "object" ? "json" : "markdown",
     editable,
     editorProps: {
-      attributes: { "aria-label": "Rough notes", role: "textbox" },
+      attributes: { "aria-label": "Your notes", role: "textbox" },
       handlePaste(view, event) {
         const files = Array.from(event.clipboardData?.files ?? []).filter((f) =>
           f.type.startsWith("image/"),

@@ -15,7 +15,7 @@ test("private defaults, immediate switches, real paths, copy, check and history 
     return null;
   });
   render(<McpSettings onError={vi.fn()} />);
-  await screen.findByText("search_notes", { exact: false });
+  await screen.findByText("searched your notes", { exact: false });
   for (const box of screen.getAllByRole("checkbox")) expect((box as HTMLInputElement).checked).toBe(false);
   for (const label of ["Allow other AI tools to read notes", "Include transcripts", "Include calendar meetings"]) {
     fireEvent.click(screen.getByLabelText(label));
@@ -27,8 +27,8 @@ test("private defaults, immediate switches, real paths, copy, check and history 
   fireEvent.click(screen.getByText("Copy Claude Desktop configuration"));
   await screen.findByText("Claude Desktop configuration copied");
   expect(data).toHaveBeenCalledWith("copy_text", { text: expect.stringContaining("/data/talkkeeper.sqlite") });
-  fireEvent.click(screen.getByText("Test MCP connection")); await screen.findByText(/Ready. Notes/);
-  fireEvent.click(screen.getByText("Clear recent access")); await screen.findByText("No recent access");
+  fireEvent.click(screen.getByText("Test the connection")); await screen.findByText(/Ready. Notes/);
+  fireEvent.click(screen.getByText("Clear list")); await screen.findByText("No other app has read your notes.");
 });
 test("missing executable has an explicit placeholder", async () => {
   vi.mocked(invoke).mockImplementation(async (_command, args) => (args as { action: string }).action === "status" ? { preferences: { enabled: false, include_transcripts: false, include_calendar: false }, executable: null, database: "/data/db" } : []);

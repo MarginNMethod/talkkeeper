@@ -138,11 +138,11 @@ export function People({
         selected AI provider when requested.
       </p>
       <label>
-        Search directory
+        Search people
         <input value={query} onChange={(e) => setQuery(e.target.value)} />
       </label>
       <label>
-        Sort directory
+        Sort by
         <select value={sort} onChange={(e) => setSort(e.target.value)}>
           <option value="name">Name</option>
           <option value="last">Last meeting</option>
@@ -317,7 +317,7 @@ export function Attendees({
   return (
     <div>
       <label>
-        Attendees
+        Who was there
         <input
           list="attendee-people"
           value={text}

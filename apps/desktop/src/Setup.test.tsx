@@ -48,9 +48,9 @@ test("time remaining uses recent throughput after the first ten seconds",async()
 test("own provider tests without saving, then saves the selected model and key",async()=>{
   mockCommands();const implementation=vi.mocked(invoke).getMockImplementation()!;
   vi.mocked(invoke).mockImplementation(async(command,args,options)=>command === "setup_test_provider" ? [{id:"chosen-by-user"}] : implementation(command,args,options));
-  render(<Harness />);fireEvent.click(await screen.findByText("I already have my own AI provider"));
-  fireEvent.change(screen.getByLabelText("Provider"),{target:{value:"OpenAICompatible"}});
-  fireEvent.change(screen.getByLabelText("API key"),{target:{value:"test-key"}});
+  render(<Harness />);fireEvent.click(await screen.findByText("I already have my own AI service"));
+  fireEvent.change(screen.getByLabelText("Service"),{target:{value:"OpenAICompatible"}});
+  fireEvent.change(screen.getByLabelText("Secret key"),{target:{value:"test-key"}});
   fireEvent.click(screen.getByText("Test connection"));await screen.findByText("Connected. 1 models found.");
   expect(data).not.toHaveBeenCalledWith("save_settings",expect.anything());
   fireEvent.change(screen.getByLabelText("AI model"),{target:{value:"chosen-by-user"}});
@@ -74,14 +74,14 @@ test("saved settings failure offers Try again and Start anyway",async()=>{
 test.each([
   ["Cannot download. Check your connection and allow TalkKeeper through your firewall, then retry.","Waiting for the internet"],
   ["Downloads are blocked. Allow TalkKeeper through your firewall or network filter, then retry.","Something is blocking the download"],
-  ["This computer has too little memory for local AI. Connect your own AI provider.","This computer can't run the built-in AI"],
+  ["This computer has too little memory for local AI. Connect your own online AI service.","This computer can't run the built-in AI"],
   ["Not enough storage. Free space on the application drive, then retry.","Not enough free space"],
-  ["The AI engine could not start. Close other AI apps, restart TalkKeeper, then retry.","The AI engine didn't start"],
+  ["The AI engine could not start. Close other AI apps, restart TalkKeeper, then retry.","The note writer didn't start"],
   ["The download did not pass its integrity check. Retry to download a fresh copy.","The download was damaged"],
   ["The engine archive is unsafe or incomplete. Retry the download.","The download was damaged"],
   ["The model catalog is invalid. Restore the bundled catalog or update TalkKeeper.","This copy of TalkKeeper is damaged"],
-  ["Automatic setup is unavailable on this platform. Connect your own AI provider.","The built-in AI isn't available on this computer"],
-  ["The AI model did not answer. Free memory and retry, or connect your own AI provider.","The AI model isn't answering"],
+  ["Automatic setup is unavailable on this platform. Connect your own online AI service.","The built-in AI isn't available on this computer"],
+  ["The AI model did not answer. Free memory and retry, or connect your own online AI service.","The AI model isn't answering"],
   ["The speech model could not be downloaded. Check your connection and free storage, then retry.","The speech model didn't download"],
   ["Cannot write application files. Check free storage and folder permissions, then retry.","TalkKeeper can't save files"],
 ])("setup error maps to its own plain headline: %s",(error,headline)=>{

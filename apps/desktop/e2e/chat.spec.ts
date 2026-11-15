@@ -17,7 +17,7 @@ test("copy transcript, propose a shorter note, apply and undo", async ({
   await page.getByRole("button", { name: "Enhance", exact: true }).click();
   // Wait for the summary to be fully written, not just started.
   await expect(
-    page.getByRole("button", { name: "Use Redo notes below" }),
+    page.getByRole("button", { name: "Use Write it again below" }),
   ).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Edit summary" })).toHaveValue(
     /Proceed with the garden plan/,
@@ -35,7 +35,7 @@ test("copy transcript, propose a shorter note, apply and undo", async ({
     .fill("make the notes shorter");
   await chat.getByRole("button", { name: "Send", exact: true }).click();
   await expect(
-    chat.getByRole("heading", { name: "Proposed revision" }),
+    chat.getByRole("heading", { name: "Suggested changes" }),
   ).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Edit summary" })).toHaveValue(
     /Proceed with the garden plan/,

@@ -39,10 +39,10 @@ test("record bar counts time, stops, and scopes controls across notes", async ({
   await expect(
     bar.getByRole("button", { name: "Pause", exact: true }),
   ).toHaveCount(0);
-  page.once("dialog", (dialog) => dialog.accept());
   await elsewhere.getByRole("button", { name: "Stop", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", {name:"Confirm",exact:true}).click();
   await expect(elsewhere).toHaveCount(0);
-  await page.getByRole("button", { name: "Planning", exact: true }).click();
+  await page.getByRole("button", { name: /^Planning/ }).click();
   await expect(
     bar.getByRole("button", { name: "Record more", exact: true }),
   ).toBeEnabled();
