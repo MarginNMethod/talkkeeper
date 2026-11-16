@@ -106,3 +106,17 @@ test("Appearance applies and persists Light, Dark and System immediately", () =>
   expect(screen.getByRole("region", {name:"Connections"})).toBeTruthy();
   expect(screen.getByRole("heading", {name:"Recording and speech"})).toBeTruthy();
 });
+test("Check my microphone sits inside the Recording section and calls back", () => {
+  const check = vi.fn();
+  render(
+    <Settings initial={{ retention: 0 }} onClose={vi.fn()} onError={vi.fn()} onCheckMicrophone={check} />,
+  );
+  const button = screen.getByRole("button", { name: "Check my microphone" });
+  expect(screen.getByRole("region", { name: "Recording" }).contains(button)).toBe(true);
+  fireEvent.click(button);
+  expect(check).toHaveBeenCalledTimes(1);
+});
+test("no Check my microphone button until speech is ready", () => {
+  open();
+  expect(screen.queryByRole("button", { name: "Check my microphone" })).toBeNull();
+});
