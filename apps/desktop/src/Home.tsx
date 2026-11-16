@@ -18,7 +18,7 @@ export function Home({ onError, onSettings, onAsk, ...list }: NotesListProps & {
     <h1>{upcoming.length ? "Coming up" : "Home"}</h1>
     <p className="page-description">{new Date(now).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
     <Card className="upcoming-card" aria-label="Coming up">
-      <h2>Coming up</h2>
+      <h2 className="sr-only">Coming up</h2>
       {!upcoming.length ? <div><p>No events today</p><Button variant="quiet" onClick={onSettings}>Connect a calendar in Settings</Button></div> :
         upcoming.map(({ event, note_id }) => <div className="upcoming-row" key={`${event.source_id}/${event.uid}/${event.instance_start}`}>
           <div className="event-date" aria-hidden="true">

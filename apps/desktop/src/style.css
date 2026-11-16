@@ -807,7 +807,7 @@ meter {
 }
 
 /* Navigation shell and shared day index. */
-.app-shell { display: grid; grid-template-columns: 208px minmax(0, 1fr); height: 100vh; overflow: hidden; }
+.app-shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); height: 100vh; overflow: hidden; }
 .app-shell .sidebar { width: auto; padding: var(--s4); background: var(--surface); border-right: 1px solid var(--border); overflow: auto; }
 .app-shell .sidebar nav { display: flex; flex-direction: column; min-height: 100%; gap: var(--s1); }
 .app-shell .sidebar nav > button, .app-shell .folder-row > button { text-align: left; min-height: 40px; }
@@ -866,7 +866,7 @@ meter {
 .app-shell .sidebar button[aria-current="page"] { box-shadow: none; }
 .ask-anything input::placeholder, .search-palette input::placeholder { color: var(--muted); opacity: 1; }
 @media (max-width: 899px) {
-  .app-shell:not(.sidebar-collapsed) > .sidebar { position: absolute; top: 64px; bottom: 0; left: 0; width: 208px; z-index: 30; box-shadow: var(--shadow-floating); }
+  .app-shell:not(.sidebar-collapsed) > .sidebar { position: absolute; top: 64px; bottom: 0; left: 0; width: 236px; z-index: 30; box-shadow: var(--shadow-floating); }
   .app-shell:not(.sidebar-collapsed) { grid-template-columns: minmax(0, 1fr); }
   .app-shell .ask-anything { left: 50%; width: min(680px, calc(100% - 48px)); }
 }

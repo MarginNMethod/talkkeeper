@@ -811,14 +811,10 @@ export function App() {
                 </button>
               </section>
             )}
-          {view.kind === "settings" && settings && setup.speechReady && (
-            <button onClick={() => void setup.checkMicrophone()}>
-              Check my microphone
-            </button>
-          )}
           {view.kind === "settings" && settings ? (
             <Settings
               initial={settings}
+              onCheckMicrophone={setup.speechReady ? () => void setup.checkMicrophone() : undefined}
               onClose={() => {
                 setSettings(null);
                 setView(previousView.current);

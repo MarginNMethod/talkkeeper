@@ -26,10 +26,12 @@ export function Settings({
   initial,
   onClose,
   onError,
+  onCheckMicrophone,
 }: {
   initial: Preferences;
   onClose: () => void;
   onError: (e: unknown) => void;
+  onCheckMicrophone?: () => void;
 }) {
   const [appearance, setAppearance] = useState<Theme>(getTheme);
   const [prefs, setPrefs] = useState<Preferences>(initial);
@@ -104,7 +106,7 @@ export function Settings({
       <section aria-label="General"><h3>General</h3><label>Appearance<select value={appearance} onChange={e => { const choice = e.target.value as Theme; setAppearance(choice); setTheme(choice); }}>{(["light", "dark", "system"] as const).map(choice => <option key={choice} value={choice}>{choice[0].toUpperCase() + choice.slice(1)}</option>)}</select></label><p>Choose a theme, or follow your computer.</p></section>
       <section aria-label="Recording">
         <h3>Recording and speech</h3>
-        <p>Automatic selection prefers the built-in microphone on macOS. Choose a microphone in the recording bar.</p>{" "}
+        <p>Automatic selection prefers the built-in microphone on macOS. Choose a microphone in the recording bar.</p>{onCheckMicrophone && <p><button type="button" onClick={onCheckMicrophone}>Check my microphone</button></p>}{" "}
         <label>
           Language spoken in your meetings
           <select
