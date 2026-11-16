@@ -1,3 +1,5 @@
+import { Row } from "@talkkeeper/ui";
+import { Modal } from "./Modal";
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { data, invoke, type Note } from "./api";
@@ -131,7 +133,7 @@ export function People({
     }
   }
   return (
-    <section>
+    <section className="directory-page">
       <h2>{kind === "people" ? "People" : "Companies"}</h2>
       <p>
         Directory details come only from your notes. Recent topics use your
@@ -149,11 +151,9 @@ export function People({
           <option value="count">Number of meetings</option>
         </select>
       </label>
-      <nav>
+      <nav aria-label="Directory entries">
         {directorySort(entries, query, sort).map((p) => (
-          <button key={p.id} disabled={busy} onClick={() => setSelected(p.id)}>
-            {p.name} ({p.meetings.length})
-          </button>
+          <Row key={p.id} icon={<span className="person-avatar" aria-hidden="true">{p.name.slice(0, 1).toUpperCase()}</span>} title={<button className="note-row-link" disabled={busy} onClick={() => setSelected(p.id)}>{p.name} ({p.meetings.length})</button>} subtitle={`${p.meetings.length} meetings`} />
         ))}
       </nav>
       {entry && (
@@ -263,7 +263,7 @@ export function People({
         </>
       )}
       {merge && (
-        <div role="dialog" aria-label="Merge people">
+        <Modal onClose={() => setMerge(null)} role="dialog" aria-label="Merge people">
           <p>
             Keep {merge[0].name} ({merge[0].email}) and combine meetings with{" "}
             {merge[1].name} ({merge[1].email})? The kept profile stays
@@ -288,7 +288,7 @@ export function People({
             Merge people
           </button>
           <button onClick={() => setMerge(null)}>Cancel merge</button>
-        </div>
+        </Modal>
       )}
     </section>
   );

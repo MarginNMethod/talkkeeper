@@ -552,6 +552,12 @@ mockIPC(async (command, args) => {
       case "delete":
         notes = notes.map(n => n.id === p.id ? {...n, deleted_at: new Date().toISOString()} : n);
         return null;
+      case "restore":
+        notes = notes.map(n => n.id === p.id ? {...n, deleted_at: null} : n);
+        return null;
+      case "purge":
+        notes = notes.filter(n => n.id !== p.id);
+        return null;
       case "templates":
         return [{ id: "auto", name: "Auto" }];
       case "folders":

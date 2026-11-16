@@ -1,4 +1,4 @@
-import { createPortal } from "react-dom";
+import { Modal } from "./Modal";
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { data, invoke, type Preferences } from "./api";
@@ -127,8 +127,8 @@ export function SnapshotControls({
           </button>
         </>
       )}
-      {picking && createPortal(
-        <div className="snapshot-consent" role="dialog" aria-label="Which window or screen?">
+      {picking && (
+        <Modal onClose={() => setPicking(false)} aria-label="Which window or screen?">
           <p>
             Snapshots can contain private messages, documents, and other
             people's information. Choose one window where possible and obtain
@@ -179,7 +179,7 @@ export function SnapshotControls({
             Start taking pictures
           </button>
           <button onClick={() => setPicking(false)}>Cancel pictures</button>
-        </div>, document.body
+        </Modal>
       )}
     </section>
   );
@@ -286,7 +286,7 @@ export function SnapshotGallery({
         </>
       )}
       {warning && (
-        <div role="dialog" aria-label="Cloud image sharing">
+        <Modal onClose={() => setWarning(false)} aria-label="Cloud image sharing">
           <p>
             Your selected online service (
             {ai?.destination ?? "current service"}) will receive included
@@ -307,7 +307,7 @@ export function SnapshotGallery({
             Allow images for this service
           </button>
           <button onClick={() => setWarning(false)}>Keep images on this computer</button>
-        </div>
+        </Modal>
       )}
       <button
         onClick={() => {

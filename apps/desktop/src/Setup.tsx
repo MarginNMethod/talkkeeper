@@ -1,3 +1,4 @@
+import { Modal } from "./Modal";
 import { useEffect, useRef, useState } from "react";
 import { data, invoke, type Preferences } from "./api";
 import { useSetup, type SetupState, type Plan } from "./useSetup";
@@ -21,7 +22,7 @@ function SetupPanel({ setup, onStart }: { setup: SetupState; onStart: () => void
       {setup.plan?.notice && <p>{setup.plan.notice}</p>}
       {setup.plan && !setup.plan.can_install && <><SetupFailure error={/memory/i.test(setup.plan.notice ?? "") ? "memory" : "storage"} plan={setup.plan} retry={()=>void setup.loadPlan()} own={()=>setOwn(true)} skip={()=>{void setup.skipAI();onStart();}} /><button onClick={() => void setup.loadPlan()}>Check again</button></>}
       {setup.error && <SetupFailure error={setup.error} retry={setup.run} own={() => setOwn(true)} skip={()=>{void setup.skipAI();onStart();}} />}
-      <a href="#own-provider" onClick={e => { e.preventDefault(); setOwn(true); }}>I already have my own AI service</a>
+      <a href="#own-provider" onClick={e => { e.preventDefault(); setOwn(true); }}>Use my own AI provider</a>
     </>}
   </section>;
 }
@@ -53,7 +54,7 @@ export function OwnProvider({onBack,onSaved}:{onBack:()=>void;onSaved:()=>void})
     <button disabled={busy} onClick={()=>void test()}>Test connection</button><p role="status">{message}</p>
     <label>AI model<select value={prefs.model} onChange={e=>setPrefs({...prefs,model:e.target.value})}><option value="">Choose a model</option>{models.map(m=><option key={m.id}>{m.id}</option>)}</select></label>
     <label><input type="checkbox" checked disabled />Still download the small speech model (78 MB) so recording works on this computer</label>
-    {confirm !== null && <section role="dialog" aria-label="Stop downloading the built-in AI model?"><p>Stop downloading the built-in AI model? The {(confirm/1e9).toFixed(1)} GB already downloaded will be removed.</p><button onClick={()=>void save(true)}>Stop and remove</button><button onClick={()=>setConfirm(null)}>Keep downloading</button></section>}
+    {confirm !== null && <Modal onClose={() => setConfirm(null)} role="dialog" aria-label="Stop downloading the built-in AI model?"><p>Stop downloading the built-in AI model? The {(confirm/1e9).toFixed(1)} GB already downloaded will be removed.</p><button onClick={()=>void save(true)}>Stop and remove</button><button onClick={()=>setConfirm(null)}>Keep downloading</button></Modal>}
     <button disabled={busy || !models.length || !prefs.model} onClick={()=>void save()}>Save and continue</button><button onClick={onBack}>Back</button>
   </section>;
 }

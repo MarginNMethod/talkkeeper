@@ -42,6 +42,7 @@ if (process.env.SHOTS === "1") {
     });
 
     test(`main views in ${theme}`, async ({ page }) => {
+      test.setTimeout(90000);
       await mkdir("e2e/screenshots", { recursive: true });
       await page.setViewportSize({ width: 1440, height: 1000 });
       // Opposite OS preference verifies that the explicit choice wins.
@@ -62,10 +63,8 @@ if (process.env.SHOTS === "1") {
       await page.getByRole("button", {name:"Product conversations",exact:true}).click();
       await expect(page.getByRole("heading", {name:"Product conversations",exact:true})).toBeVisible();
       await shot("space");
-      for (const name of ["Today", "People", "Companies"]) {
+      for (const name of ["Today", "People"]) {
         const nav = page.getByRole("button", { name, exact: true });
-        // People and Companies only appear once the mock data has some.
-        if (name !== "Today" && (await nav.count()) === 0) continue;
         await nav.click();
         await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
         await shot(name.toLowerCase());
@@ -80,12 +79,38 @@ if (process.env.SHOTS === "1") {
       await page.getByRole("button", { name: "Ask your notes", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Ask your notes", exact: true })).toBeVisible();
       await shot("workspace-chat");
+      await page.setViewportSize({width:700,height:900});
+      await shot("workspace-chat-compact");
+      await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 700);
+      await page.setViewportSize({width:1440,height:1000});
+      if (!(await page.getByRole("button", {name:"Settings",exact:true}).isVisible())) await page.getByRole("button", {name:"Toggle sidebar"}).click();
       await page.getByRole("button", { name: "Settings", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
       await shot("settings");
+      await page.getByRole("button", {name:"Close",exact:true}).click();
+      await page.getByRole("button", {name:"Trash",exact:true}).click();
+      await shot("trash-empty");
+      await page.getByRole("button", {name:"Home",exact:true}).click();
+      await page.getByRole("button", {name:"A little room to think",exact:true}).click();
+      await page.getByRole("button", {name:"More actions for this note"}).click();
+      await page.getByRole("button", {name:"Move to Trash",exact:true}).click();
+      await page.getByRole("button", {name:"Trash",exact:true}).click();
+      await expect(page.locator(".trash-page .tk-row")).toHaveCount(1);
+      await shot("trash");
       await page.goto("/?setup");
       await expect(page.getByRole("button", { name: "Get started", exact: true })).toBeVisible();
       await shot("first-run");
+      await page.goto("/?setup&hold");
+      await page.getByRole("button", {name:"Get started",exact:true}).click();
+      await expect(page.getByRole("progressbar", {name:"Setup progress"})).toBeVisible();
+      await shot("setup-downloading");
+      await page.goto("/?recording");
+      await page.getByRole("button", {name:"New note",exact:true}).click();
+      await page.getByRole("button", {name:"Record",exact:true}).click();
+      await page.getByRole("button", {name:"Home",exact:true}).click();
+      await page.getByRole("button", {name:"Stop",exact:true}).click();
+      await expect(page.getByRole("alertdialog")).toBeVisible();
+      await shot("dialog");
     });
   }
 }

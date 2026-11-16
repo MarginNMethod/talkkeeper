@@ -44,7 +44,13 @@ test("record bar counts time, stops, and scopes controls across notes", async ({
   await bar.getByRole("button", {name:"Recording options"}).click();
   await expect(bar.getByRole("button", {name:"Take pictures of my screen"})).toBeDisabled();
   await page.keyboard.press("Escape");
-  await elsewhere.getByRole("button", { name: "Stop", exact: true }).click();
+  const stopElsewhere = elsewhere.getByRole("button", { name: "Stop", exact: true });
+  await stopElsewhere.click();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(stopElsewhere).toBeFocused();
+  await stopElsewhere.click();
   await page
     .getByRole("alertdialog")
     .getByRole("button", { name: "Confirm", exact: true })

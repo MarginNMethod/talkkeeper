@@ -91,3 +91,18 @@ test("one Save writes preferences and changed voice typing options together", as
   await waitFor(() => expect(data).toHaveBeenCalledWith("save_settings", {retention:0}));
   expect(screen.getByText("Saved").getAttribute("role")).toBe("status");
 });
+
+test("Appearance applies and persists Light, Dark and System immediately", () => {
+  open();
+  const control = screen.getByLabelText("Appearance");
+  for (const choice of ["light", "dark", "system"]) {
+    fireEvent.change(control, {target: {value: choice}});
+    expect(document.documentElement.dataset.theme).toBe(choice === "system" ? undefined : choice);
+    expect(localStorage.getItem("tk-theme")).toBe(choice === "system" ? null : choice);
+  }
+  expect(screen.getByRole("region", {name:"General"})).toBeTruthy();
+  expect(screen.getByRole("region", {name:"About"})).toBeTruthy();
+  expect(screen.getByRole("region", {name:"AI"})).toBeTruthy();
+  expect(screen.getByRole("region", {name:"Connections"})).toBeTruthy();
+  expect(screen.getByRole("heading", {name:"Recording and speech"})).toBeTruthy();
+});

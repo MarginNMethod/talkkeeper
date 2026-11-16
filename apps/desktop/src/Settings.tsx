@@ -1,3 +1,5 @@
+import { Modal } from "./Modal";
+import { getTheme, setTheme, type Theme } from "./theme";
 import { CopyDiagnostics } from "./CopyDiagnostics";
 import { McpSettings } from "./McpSettings";
 import { CalendarSettings } from "./Calendar";
@@ -29,6 +31,7 @@ export function Settings({
   onClose: () => void;
   onError: (e: unknown) => void;
 }) {
+  const [appearance, setAppearance] = useState<Theme>(getTheme);
   const [prefs, setPrefs] = useState<Preferences>(initial);
   const [voiceConfig, setVoiceConfig] = useState<Config | null>(null);
   const [voiceVersion, setVoiceVersion] = useState(0);
@@ -98,9 +101,9 @@ export function Settings({
   return (
     <section className="settings">
       <h2>Settings</h2>
-      <CopyDiagnostics />
+      <section aria-label="General"><h3>General</h3><label>Appearance<select value={appearance} onChange={e => { const choice = e.target.value as Theme; setAppearance(choice); setTheme(choice); }}>{(["light", "dark", "system"] as const).map(choice => <option key={choice} value={choice}>{choice[0].toUpperCase() + choice.slice(1)}</option>)}</select></label><p>Choose a theme, or follow your computer.</p></section>
       <section aria-label="Recording">
-        <h3>Recording</h3>
+        <h3>Recording and speech</h3>
         <p>Automatic selection prefers the built-in microphone on macOS. Choose a microphone in the recording bar.</p>{" "}
         <label>
           Language spoken in your meetings
@@ -216,6 +219,7 @@ export function Settings({
           />
         </label>
       </section>
+      <section aria-label="AI"><h3>AI</h3>
       <details>
         <summary>Advanced</summary>
         <p>
@@ -389,11 +393,15 @@ export function Settings({
             </>
           )}
         </details>
+      </details>
+      </section>
+      <section aria-label="Connections"><h3>Connections</h3>
         <details>
           <summary>Let other AI apps read your notes</summary>
           <McpSettings onError={onError} />
         </details>
-      </details>
+      </section>
+      <section aria-label="About"><h3>About</h3><p>TalkKeeper · A place for your conversations.</p><CopyDiagnostics /></section>
       <footer className="settings-footer">
         <button
           className="primary"
@@ -437,9 +445,10 @@ export function Settings({
         </button>
       </footer>
       {leaving && !confirm && (
-        <section role="dialog" aria-label="Save your changes?">
+        <Modal onClose={() => setLeaving(false)} role="dialog" aria-label="Save your changes?">
           <h3>Save your changes?</h3>
           <button
+            className="primary"
             onClick={() => {
               const before = baseline.retention ?? 0,
                 after = prefs.retention ?? 0;
@@ -452,20 +461,20 @@ export function Settings({
           </button>
           <button onClick={onClose}>Discard</button>
           <button onClick={() => setLeaving(false)}>Keep editing</button>
-        </section>
+        </Modal>
       )}
       {confirm && (
-        <section role="alertdialog" aria-label="Delete older transcripts?">
+        <Modal onClose={() => setConfirm(false)} role="alertdialog" aria-label="Delete older transcripts?">
           <h3>Delete older transcripts?</h3>
           <p>
             Transcripts older than {prefs.retention} days will be deleted now.
             Your notes and summaries are kept. This cannot be undone.
           </p>
-          <button onClick={() => void save()} disabled={busy}>
+          <button className="primary danger" onClick={() => void save()} disabled={busy}>
             Confirm and apply
           </button>
           <button onClick={() => setConfirm(false)}>Cancel</button>
-        </section>
+        </Modal>
       )}
     </section>
   );

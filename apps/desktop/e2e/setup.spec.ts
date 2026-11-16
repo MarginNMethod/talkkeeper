@@ -82,7 +82,7 @@ test("own provider opens a small panel and Back changes nothing", async ({
 }) => {
   await page.goto("/?setup");
   await page
-    .getByRole("link", { name: "I already have my own AI service" })
+    .getByRole("link", { name: "Use my own AI provider" })
     .click();
   await expect(
     page.getByRole("heading", { name: "Use your own AI service" }),
