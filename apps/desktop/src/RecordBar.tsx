@@ -240,6 +240,7 @@ export function RecordBar(p: RecordBarProps) {
   mainRef.current = main;
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      if (document.querySelector('[aria-modal="true"]')) return;
       if (
         (e.ctrlKey || e.metaKey) &&
         e.shiftKey &&

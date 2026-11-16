@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { Modal } from "./Modal";
 import { SidebarIcon } from "./SidebarIcon";
 import { Popover } from "@talkkeeper/ui";
 import { data } from "./api";
@@ -101,7 +102,7 @@ return <aside className="sidebar"><nav aria-label="Main">{link("home", "Home")}{
             </form>
           )}
           {deleteFolder && (
-            <section
+            <Modal onClose={() => setDeleteFolder(null)}
               role="alertdialog"
               aria-label={`Delete the folder "${deleteFolder.name}"?`}
             >
@@ -123,7 +124,7 @@ return <aside className="sidebar"><nav aria-label="Main">{link("home", "Home")}{
                 Delete folder
               </button>
               <button onClick={() => setDeleteFolder(null)}>Cancel</button>
-            </section>
+            </Modal>
           )}
 
 {counts.people > 0 && link("people", "People")}{counts.companies > 0 && link("companies", "Companies")}

@@ -64,6 +64,7 @@ test("selected notes answer with a citation; recipe result saves as a note", asy
   await page
     .getByRole("button", { name: "Ask your notes", exact: true })
     .click();
+  await page.getByText("Scope and saved questions", {exact:true}).click();
   await page
     .getByLabel("Which notes?", { exact: true })
     .selectOption("selected");
@@ -78,6 +79,7 @@ test("selected notes answer with a citation; recipe result saves as a note", asy
     .getByLabel("Question", { exact: true })
     .fill("What was approved for the garden?");
   await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await page.getByText("Sources searched", {exact:true}).click();
   await expect(
     page.getByText("Searched 2 notes / 2 lines and sections; retrieved 2."),
   ).toBeVisible();
@@ -89,6 +91,7 @@ test("selected notes answer with a citation; recipe result saves as a note", asy
   await page
     .getByRole("button", { name: "Ask your notes", exact: true })
     .click();
+  await page.getByText("Scope and saved questions", {exact:true}).click();
   await page
     .getByLabel("Saved question", { exact: true })
     .selectOption("recipe-1");

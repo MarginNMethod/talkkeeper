@@ -30,7 +30,7 @@ export function Templates({
     );
   }
   return (
-    <details>
+    <details className="template-editor">
       <summary>Edit styles…</summary>
       <button onClick={() => edit()}>New style</button>
       {templates

@@ -119,7 +119,12 @@ test("scope picker, import and export", async () => {
       onSaved={() => {}}
     />,
   );
-  await waitFor(() => expect(screen.getByText("Status")).toBeTruthy());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Status" })).toBeTruthy());
+  const options = screen.getByText("Scope and saved questions").closest("details")!;
+  expect(options.open).toBe(false);
+  fireEvent.click(screen.getByRole("button", {name:"Status"}));
+  expect(screen.getByRole("button", {name:"Run question"})).toBeTruthy();
+  expect(screen.getByLabelText("Saved question").getAttribute("value") ?? (screen.getByLabelText("Saved question") as HTMLSelectElement).value).toBe("r");
   fireEvent.change(screen.getByLabelText("Which notes?"), {
     target: { value: "selected" },
   });

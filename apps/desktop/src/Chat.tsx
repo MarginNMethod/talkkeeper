@@ -155,8 +155,8 @@ export function Chat({
           ))}
         </div>
         {messages.map((m) => (
-          <article key={m.id}>
-            <strong>{m.role}</strong>
+          <article className={`message message-${m.role}`} key={m.id}>
+            <strong>{m.role === "user" ? "You" : "TalkKeeper"}</strong>
             {m.revision && m.proposed_edit_id ? (
               <div aria-label="Suggested changes">
                 <h3>Suggested changes</h3>

@@ -1,10 +1,11 @@
+import { EmptyState, Row } from "@talkkeeper/ui";
+import { Modal } from "./Modal";
 import { NotePage, NoteHeader, AskBar } from "./NotePage";
 import { RecordingConsent } from "./RecordingConsent";
 import { Sidebar, type View } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { Home } from "./Home";
 import { SpacePage } from "./SpacePage";
-import { NotesList } from "./NotesList";
 import { SearchPalette } from "./SearchPalette";
 import {
   Agenda,
@@ -109,6 +110,7 @@ export function App() {
   }, []);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
+      if (document.querySelector('[aria-modal="true"]')) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setSearchOpen(value => !value);
@@ -136,7 +138,7 @@ export function App() {
     setSettings(prefs);
     setView({kind: "settings"});
   };
-  const [pendingAction, setPendingAction] = useState<"stop" | "purge" | null>(
+  const [pendingAction, setPendingAction] = useState<"stop" | { purge: string } | null>(
     null,
   );
   const [directoryCounts, setDirectoryCounts] = useState({
@@ -664,10 +666,10 @@ export function App() {
   function stopOther() {
     setPendingAction("stop");
   }
-  async function mutate(action: string) {
-    if (!note) return;
+  async function mutate(action: string, id = note?.id) {
+    if (!id) return;
     await flush();
-    await data(action, { id: note.id });
+    await data(action, { id });
     setNote(null);
     setView({kind: trash ? "trash" : "home"});
     setSegments([]);
@@ -704,7 +706,7 @@ export function App() {
         onError={fail}
       />
       {setup.quitRequested && (
-        <section role="dialog" aria-label="Setup isn't finished yet">
+        <Modal onClose={() => setup.setQuitRequested(false)} role="dialog" aria-label="Setup isn't finished yet">
           <h2>Setup isn't finished yet</h2>
           <p>
             If you quit now, the download pauses and carries on next time you
@@ -722,10 +724,10 @@ export function App() {
             />
             Don't ask again
           </label>
-        </section>
+        </Modal>
       )}
       {pendingAction && (
-        <section
+        <Modal onClose={() => setPendingAction(null)}
           role="alertdialog"
           aria-label={
             pendingAction === "stop"
@@ -742,20 +744,21 @@ export function App() {
             onClick={() => {
               if (pendingAction === "stop")
                 void capture("stop_capture", captureNote ?? undefined);
-              else void mutate("purge").catch(fail);
+              else void mutate("purge", pendingAction.purge).catch(fail);
               setPendingAction(null);
             }}
           >
             Confirm
           </button>
           <button onClick={() => setPendingAction(null)}>Cancel</button>
-        </section>
+        </Modal>
       )}
-      <main className={`app-shell${collapsed ? " sidebar-collapsed" : ""}`}>
+      <a className="skip-link" href="#main-content">Skip to content</a>
+      <div className={`app-shell${collapsed ? " sidebar-collapsed" : ""}`}>
         <Sidebar view={view} onNavigate={next => void navigate(next).catch(fail)} folders={folders} setFolders={setFolders} counts={{...directoryCounts, people: directoryCounts.people || (notes.some(n => n.attendees.length > 0) ? 1 : 0)}} onError={fail} refresh={refresh}>
           <SetupCard setup={setup} systemAudio={systemAudio} showOffer={setupChoice} />
         </Sidebar>
-        <div className={`workspace${note?.id === firstRunNote ? " setup-first-note" : ""}`}>
+        <main id="main-content" tabIndex={-1} className={`workspace${note?.id === firstRunNote ? " setup-first-note" : ""}`}>
           <TopBar collapsed={collapsed} onToggle={toggleSidebar} onSearch={() => setSearchOpen(true)} onCreate={() => void create().catch(fail)} />
           {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} onOpen={n => { setSearchOpen(false); void select(n).catch(fail); }} onError={fail} />}
           {captureNote && visibleNote.current !== captureNote && (
@@ -891,13 +894,13 @@ export function App() {
               }
             />
           ) : view.kind === "trash" ? (
-            <section>
+            <section className="trash-page">
               <h2>Trash</h2>
               <p>
                 Notes here can be restored. Nothing is deleted until you choose
                 "Delete forever".
               </p>
-              {!notes.length && <p>Trash is empty.</p>}<NotesList notes={notes} onOpen={n => void select(n).catch(fail)} />
+              {!notes.length && <EmptyState title="Trash is empty." />}{notes.map(n => <Row key={n.id} title={<button className="note-row-link" onClick={() => void select(n).catch(fail)}>{n.title}</button>} actions={<><button className="quiet" onClick={() => void data("restore", {id:n.id}).then(refresh).catch(fail)}>Restore</button><button className="quiet" onClick={() => setPendingAction({ purge: n.id })}>Delete forever</button></>} />)}
             </section>
           ) : view.kind === "home" ? (
             <Home notes={notes} captureNote={captureNote} durations={durations} onOpen={n => void select(n).then(refresh).catch(fail)} onError={fail} onSettings={() => void navigate({kind:"settings"})} onAsk={question => { void navigate({kind:"chat"}, question).catch(fail); }} />
@@ -1017,7 +1020,7 @@ export function App() {
                   onExport={(format, copy) => void exportNote(format, copy).catch(fail)}
                   onRestore={() => void mutate("restore").catch(fail)}
                   onTrash={() => void mutate("delete").catch(fail)}
-                  onPurge={() => setPendingAction("purge")}
+                  onPurge={() => setPendingAction({ purge: note.id })}
                   onOpen={(id) =>
                     void flush()
                       .then(async () => {
@@ -1159,8 +1162,8 @@ export function App() {
               </p>
             </section>
           )}
-        </div>
-      </main>
+        </main>
+      </div>
     </>
   );
 }

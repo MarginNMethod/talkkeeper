@@ -93,6 +93,10 @@ test("person page shows its editing fields as soon as the person appears", async
   // between them used to make this page look half-loaded (and flaked on slow machines).
   await screen.findByRole("heading", { level: 3, name: "Ada" });
   expect(screen.getByLabelText("Person name")).toBeTruthy();
+  const directory = screen.getByRole("navigation", {name:"Directory entries"});
+  expect(directory.querySelectorAll(".tk-row")).toHaveLength(2);
+  expect(directory.querySelector(".person-avatar")?.getAttribute("aria-hidden")).toBe("true");
+  expect(directory.textContent).toContain("1 meetings");
   expect(screen.getByText("Start a note with this person")).toBeTruthy();
 });
 test("person page lists meetings, starts notes and confirms merge", async () => {

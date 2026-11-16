@@ -242,6 +242,8 @@ export function WorkspaceChat({
         </p>
       )}
       {error && <p role="alert">{error}</p>}
+      <p className="chat-scope" role="status">{mode} · {count} notes included</p>
+      <details className="chat-options"><summary>Scope and saved questions</summary>
       <fieldset disabled={busy}>
         <legend>Which notes?</legend>
         <label>
@@ -578,17 +580,19 @@ export function WorkspaceChat({
           </button>
         </div>
       ))}
+      </details>
+      <div className="recipe-chips" aria-label="Suggested questions">{recipes.map(recipe => <button className="quiet" key={recipe.id} disabled={busy} onClick={() => { setRecipeId(recipe.id); setScope(recipe.default_scope); setMode(recipe.default_scope.note_ids ? "saved selection" : recipe.default_scope.folder_id ? "folder" : recipe.default_scope.date_from || recipe.default_scope.date_to ? "date" : "all"); }}>{recipe.name}</button>)}</div>
       {chat?.messages.map((m, i) => (
-        <article key={i}>
-          <strong>{m.role}</strong>
+        <article className={`message message-${m.role}`} key={i}>
+          <strong>{m.role === "user" ? "You" : "TalkKeeper"}</strong>
           <CitationText message={m} onOpen={onOpen} />
           {m.role === "assistant" && (
             <>
-              <p>
+              <details className="retrieval-details"><summary>Sources searched</summary><p>
                 Searched {m.retrieval.notes_searched} notes /{" "}
                 {m.retrieval.segments_searched} lines and sections; retrieved{" "}
                 {m.retrieval.sources.length}.
-              </p>
+              </p></details>
               <button
                 onClick={() =>
                   void navigator.clipboard.writeText(m.text).catch(fail)
@@ -605,9 +609,11 @@ export function WorkspaceChat({
           {partial || "Searching and answering…"}
         </p>
       )}
+      <div className="workspace-composer">
       <label>
-        Question
+        <span className="sr-only">Question</span>
         <textarea
+          placeholder="Ask anything"
           aria-label="Question"
           maxLength={8000}
           value={question}
@@ -626,6 +632,7 @@ export function WorkspaceChat({
       >
         {recipeId ? "Run question" : "Ask"}
       </button>
+      </div>
       <button
         disabled={busy || !chat?.messages.some((m) => m.role === "assistant")}
         onClick={() =>

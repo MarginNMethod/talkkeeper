@@ -1,3 +1,4 @@
+import { Modal } from "./Modal";
 import { useEffect, useRef, useState } from "react";
 import { data, invoke, type Note, type Preferences } from "./api";
 export interface CalendarEvent {
@@ -195,8 +196,8 @@ export function CalendarSettings({
           </button>
           <button onClick={() => setRemoving(s.id)}>Remove calendar</button>
           {removing === s.id && (
-            <div role="alert">
-              <p>
+            <Modal role="alertdialog" aria-label="Remove calendar?" onClose={() => setRemoving(null)}>
+              <h3>Remove calendar?</h3><p>
                 Remove this calendar and its cached events? Your notes stay.
               </p>
               <button
@@ -210,7 +211,7 @@ export function CalendarSettings({
                 Confirm removal
               </button>
               <button onClick={() => setRemoving(null)}>Keep calendar</button>
-            </div>
+            </Modal>
           )}
         </article>
       ))}
@@ -291,7 +292,7 @@ export function Agenda({
     groups.set(day, [...(groups.get(day) ?? []), entry]);
   }
   return (
-    <section aria-label="Today">
+    <section className="agenda-page" aria-label="Today">
       <h2>Today</h2>
       {!groups.size && <p>No upcoming meetings. Add a calendar in Settings.</p>}
       {[...groups].map(([day, events]) => (

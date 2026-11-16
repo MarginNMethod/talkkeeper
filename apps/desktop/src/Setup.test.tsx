@@ -14,7 +14,10 @@ import React from "react";
 function mockCommands() { vi.mocked(invoke).mockImplementation(async command => { if(command === "setup_plan")return plan; if(command === "setup_status")return {completed:false,custom:false}; if(command === "setup_run")return new Promise(()=>{}); }); }
 test("one click leaves welcome and card survives Settings with sizes and pause", async()=>{
   mockCommands(); render(<Harness />); await screen.findByText(/Downloads 6.8/);
+  expect(screen.getAllByRole("button", {name:"Get started"})).toHaveLength(1);
+  expect(document.querySelectorAll(".setup-welcome button.primary")).toHaveLength(1);
   fireEvent.click(screen.getByText("Get started"));
+  expect(screen.getAllByRole("progressbar")).toHaveLength(1);
   act(()=>mocks.listeners["setup://progress"]({payload:{stage:"PullModel",completed:1.35e9,total:2.7e9,message:"Downloading"}}));
   expect(screen.getByText(/1.4 of 6.8 GB/)).toBeTruthy();
   fireEvent.click(screen.getByText("Settings")); expect(screen.getByText(/1.4 of 6.8 GB/)).toBeTruthy();
@@ -48,7 +51,7 @@ test("time remaining uses recent throughput after the first ten seconds",async()
 test("own provider tests without saving, then saves the selected model and key",async()=>{
   mockCommands();const implementation=vi.mocked(invoke).getMockImplementation()!;
   vi.mocked(invoke).mockImplementation(async(command,args,options)=>command === "setup_test_provider" ? [{id:"chosen-by-user"}] : implementation(command,args,options));
-  render(<Harness />);fireEvent.click(await screen.findByText("I already have my own AI service"));
+  render(<Harness />);fireEvent.click(await screen.findByText("Use my own AI provider"));
   fireEvent.change(screen.getByLabelText("Service"),{target:{value:"OpenAICompatible"}});
   fireEvent.change(screen.getByLabelText("Secret key"),{target:{value:"test-key"}});
   fireEvent.click(screen.getByText("Test connection"));await screen.findByText("Connected. 1 models found.");

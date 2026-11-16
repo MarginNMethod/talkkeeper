@@ -78,3 +78,33 @@ test("new notes belong to their space and survive deleting it", async ({page}) =
   await expect(page.getByRole("button", {name:"Space research",exact:true})).toBeVisible();
   await expect(page.getByRole("button", {name:"Planning the next chapter",exact:true})).toBeVisible();
 });
+
+test("skip link targets the main landmark; trash restores and permanently deletes", async ({page}) => {
+  await page.keyboard.press("Tab");
+  const skip = page.getByRole("link", {name:"Skip to content"});
+  await expect(skip).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("main")).toBeFocused();
+  await page.getByRole("button", {name:"Planning the next chapter",exact:true}).click();
+  const trashNote = async () => {
+    await page.getByRole("button", {name:"More actions for this note"}).click();
+    await page.getByRole("button", {name:"Move to Trash",exact:true}).click();
+    await page.getByRole("button", {name:"Trash",exact:true}).click();
+  };
+  await trashNote();
+  await expect(page.locator(".trash-page .tk-row")).toHaveCount(1);
+  await page.getByRole("button", {name:"Restore",exact:true}).click();
+  await expect(page.getByText("Trash is empty.", {exact:true})).toBeVisible();
+  await page.getByRole("button", {name:"Home",exact:true}).click();
+  await page.getByRole("button", {name:"Planning the next chapter",exact:true}).click();
+  await trashNote();
+  const remove = page.getByRole("button", {name:"Delete forever",exact:true});
+  await remove.click();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(remove).toBeFocused();
+  await remove.click();
+  await page.getByRole("alertdialog").getByRole("button", {name:"Confirm",exact:true}).click();
+  await expect(page.getByText("Trash is empty.", {exact:true})).toBeVisible();
+});
