@@ -1,6 +1,6 @@
 import { EmptyState, Row } from "@talkkeeper/ui";
 import { Modal } from "./Modal";
-import { NotePage, NoteHeader, AskBar } from "./NotePage";
+import { NotePage, NoteHeader, AskBar, NoteLoadState } from "./NotePage";
 import { RecordingConsent } from "./RecordingConsent";
 import { Sidebar, type View } from "./Sidebar";
 import { TopBar } from "./TopBar";
@@ -121,6 +121,8 @@ export function App() {
   }, []);
   const previousView = useRef<View>({kind: "home"});
   async function navigate(next: View, question = "") {
+    selectReqRef.current++;
+    setNoteLoad({ status: "idle", note: null });
     await flush();
     setSetupChoice(true);
     setPersonId(undefined);
@@ -134,6 +136,8 @@ export function App() {
     setView(next);
   }
   const openSettings = (prefs: Preferences) => {
+    selectReqRef.current++;
+    setNoteLoad({ status: "idle", note: null });
     if (view.kind !== "settings") previousView.current = view;
     setSettings(prefs);
     setView({kind: "settings"});
@@ -249,9 +253,17 @@ export function App() {
     setup.status !== null &&
     !setup.status.completed &&
     !setup.status.custom;
+  useEffect(() => () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+  }, []);
   const current = useRef<Note | null>(null),
     saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
-    saveQueue = useRef(Promise.resolve());
+    saveQueue = useRef(Promise.resolve()),
+    selectReqRef = useRef(0);
+  const [noteLoad, setNoteLoad] = useState<{
+    status: "idle" | "loading" | "error";
+    note: Note | null;
+  }>({ status: "idle", note: null });
   current.current = note;
   visibleNote.current =
     view.kind === "note"
@@ -427,29 +439,51 @@ export function App() {
   }
 
   async function select(n: Note) {
+    const reqId = ++selectReqRef.current;
     setSettings(null);
-    await flush();
-    const lines = await data<Segment[]>("segments", { id: n.id });
-    setView({kind:"note"});
+    const pendingFlush = flush();
+    setView({ kind: "note" });
+    setNote(null);
+    setSegments([]);
+    setExpiry(null);
+    setNoteLoad({ status: "loading", note: n });
+    await pendingFlush;
+    if (reqId !== selectReqRef.current) return;
+    let lines: Segment[];
+    try {
+      lines = await data<Segment[]>("segments", { id: n.id });
+    } catch {
+      if (reqId !== selectReqRef.current) return;
+      setNoteLoad({ status: "error", note: n });
+      return;
+    }
+    if (reqId !== selectReqRef.current) return;
+    setNoteLoad({ status: "idle", note: null });
     setNote(n);
     setTemplate(n.template_id ?? "auto");
     setSegments(lines);
-    setExpiry(null);
     void data<number>("recorded_duration", { id: n.id })
       .then((ms) => {
+        if (reqId !== selectReqRef.current) return;
         if (typeof ms === "number") setDurations((d) => ({ ...d, [n.id]: ms }));
       })
-      .catch(fail);
+      .catch((e) => {
+        if (reqId === selectReqRef.current) fail(e);
+      });
     void data<{ deleted_after?: number; expires?: string }>(
       "transcript_expiry",
       { id: n.id },
     )
       .then((value) => {
+        if (reqId !== selectReqRef.current) return;
         if (current.current?.id === n.id) setExpiry(value);
       })
-      .catch(fail);
+      .catch((e) => {
+        if (reqId === selectReqRef.current) fail(e);
+      });
   }
   async function create(firstRun = false) {
+    selectReqRef.current++;
     await flush();
     const n = await data<Note>("start_note", {});
     if (view.kind === "space" && view.folder) {
@@ -668,9 +702,11 @@ export function App() {
   }
   async function mutate(action: string, id = note?.id) {
     if (!id) return;
+    selectReqRef.current++;
     await flush();
     await data(action, { id });
     setNote(null);
+    setNoteLoad({ status: "idle", note: null });
     setView({kind: trash ? "trash" : "home"});
     setSegments([]);
     await refresh();
@@ -1028,6 +1064,8 @@ export function App() {
                             p.name.toLowerCase() === id.toLowerCase(),
                         );
                         if (p) {
+                          selectReqRef.current++;
+                          setNoteLoad({ status: "idle", note: null });
                           setPersonId(p.id);
                           setView({ kind: "people" });
                         }
@@ -1148,6 +1186,15 @@ export function App() {
                   }
                 </AskBar>
               }
+            />
+          ) : view.kind === "note" && noteLoad.status !== "idle" ? (
+            <NoteLoadState
+              status={noteLoad.status}
+              title={noteLoad.note?.title}
+              onRetry={() => {
+                if (noteLoad.note) void select(noteLoad.note);
+              }}
+              onBack={() => void navigate({ kind: "home" }).catch(fail)}
             />
           ) : (
             <section className="empty">

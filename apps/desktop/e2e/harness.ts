@@ -46,6 +46,15 @@ let captureState = "stopped";
 let captureStarted = 0;
 let cancelStart: (() => void) | undefined;
 const recordingTest = new URLSearchParams(location.search).has("recording");
+const harnessParams = new URLSearchParams(location.search);
+const hasSlowNote = harnessParams.has("slowNote");
+const slowNoteId = harnessParams.get("slowNote") ?? "";
+let noteFailsPending = harnessParams.has("noteFails");
+let saveFailsPending = harnessParams.has("saveFails");
+const noteReleaseQueue: (() => void)[] = [];
+window.addEventListener("mock:release-note", () => {
+  for (const release of noteReleaseQueue.splice(0)) release();
+});
 const recordingLines: Record<string, Record<string, unknown>[]> = {};
 function emit(event: string, payload: unknown) {
   for (const handler of listeners[event] ?? [])
@@ -572,6 +581,12 @@ mockIPC(async (command, args) => {
         notes = notes.map(n => n.folder_id === p.id ? {...n,folder_id:null} : n);
         return;
       case "segments":
+        if (hasSlowNote && (!slowNoteId || String(p.id) === slowNoteId))
+          await new Promise<void>((resolve) => noteReleaseQueue.push(resolve));
+        if (noteFailsPending) {
+          noteFailsPending = false;
+          throw new Error("Simulated note load failure");
+        }
         if (recordingTest)
           return structuredClone(recordingLines[String(p.id)] ?? []);
         if (new URLSearchParams(location.search).has("setup")) return [];
@@ -611,6 +626,10 @@ mockIPC(async (command, args) => {
         return structuredClone(n);
       }
       case "update":
+        if (saveFailsPending) {
+          saveFailsPending = false;
+          throw new Error("Simulated save failure");
+        }
         notes = notes.map((n) => (n.id === p.id ? structuredClone(p) : n));
         return structuredClone(p);
       case "search":
