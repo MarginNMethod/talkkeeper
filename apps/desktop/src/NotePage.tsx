@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, IconButton, Popover } from "@talkkeeper/ui";
 import { Attendees } from "./People";
 import { Editor } from "./Editor";
@@ -36,6 +36,17 @@ export function NotePage({
   transcript: ReactNode;
   chat: ReactNode;
 }) {
+  const mounted = useRef(false);
+  const lastBody = useRef({
+    doc: JSON.stringify(note.notes_doc ?? null),
+    md: note.notes_markdown,
+  });
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, [note.id]);
   return (
     <article className="note-page">
       {notices}
@@ -47,9 +58,17 @@ export function NotePage({
             content={note.notes_markdown}
             document={note.notes_doc}
             editable={!readOnly}
-            onChange={(notes_doc, notes_markdown) =>
-              update({ notes_doc, notes_markdown })
-            }
+            onChange={(notes_doc, notes_markdown) => {
+              const doc = JSON.stringify(notes_doc ?? null);
+              const prev = lastBody.current;
+              lastBody.current = { doc, md: notes_markdown };
+              if (
+                mounted.current &&
+                !readOnly &&
+                (notes_markdown !== prev.md || (prev.doc !== "null" && doc !== prev.doc))
+              )
+                update({ notes_doc, notes_markdown });
+            }}
           />
         }
         written={
@@ -82,6 +101,59 @@ export function NotePage({
       />
       {chat}
       {recording}
+    </article>
+  );
+}
+
+export function NoteLoadState({
+  status,
+  title,
+  onRetry,
+  onBack,
+}: {
+  status: "loading" | "error";
+  title?: string;
+  onRetry: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <article className="note-page">
+      {status === "loading" ? (
+        <section
+          className="note-state-loading"
+          role="status"
+          aria-busy="true"
+          aria-label="Opening note"
+        >
+          {title ? (
+            <h1 className="note-state-title">{title}</h1>
+          ) : (
+            <div className="note-state-skeleton-title" aria-hidden="true" />
+          )}
+          <p className="note-state-copy">Opening note…</p>
+          <div className="note-state-skeleton-line" aria-hidden="true" />
+          <div
+            className="note-state-skeleton-line note-state-skeleton-line-short"
+            aria-hidden="true"
+          />
+        </section>
+      ) : (
+        <section className="note-state-error" role="alert">
+          <h2>Couldn't open this note</h2>
+          <p>
+            Something went wrong while loading this note. Your saved notes
+            haven't changed.
+          </p>
+          <div className="note-state-actions">
+            <button type="button" className="primary" onClick={onRetry}>
+              Retry
+            </button>
+            <button type="button" className="secondary" onClick={onBack}>
+              Back to Home
+            </button>
+          </div>
+        </section>
+      )}
     </article>
   );
 }

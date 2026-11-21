@@ -878,6 +878,19 @@ meter {
 .note-header > .tk-popover > button { font-size: 0; }
 .note-header > .tk-popover > button::after { content: '…'; font-size: 24px; }
 .note-page .note-metadata { margin: 12px 0 32px; font-size: 14px; color: var(--muted); }
+.note-state-loading { display: grid; gap: var(--s3); }
+.note-state-title { font-family: var(--font-display); font-size: var(--text-title); font-weight: 400; line-height: var(--leading-title); margin: 0; }
+.note-state-copy { margin: 0; font-size: var(--text-sm); color: var(--muted); }
+.note-state-skeleton-title, .note-state-skeleton-line { border-radius: var(--radius-sm); background: var(--surface-sunken); animation: note-pulse var(--motion-normal) var(--ease-out) infinite alternate; }
+.note-state-skeleton-title { height: 36px; width: 62%; }
+.note-state-skeleton-line { height: 18px; width: 100%; }
+.note-state-skeleton-line-short { width: 72%; }
+@keyframes note-pulse { from { opacity: 0.6; } to { opacity: 1; } }
+.note-state-error { max-width: 560px; padding: var(--s6); border: 1px solid var(--border-strong); border-inline-start: 4px solid var(--danger); border-radius: var(--radius-md); background: var(--panel); }
+.note-state-error h2 { margin: 0 0 var(--s2); font-family: var(--font-display); font-size: var(--text-xl); font-weight: 400; line-height: 1.25; }
+.note-state-error p { margin: 0 0 var(--s4); font-size: var(--text-base); color: var(--muted); }
+.note-state-actions { display: flex; flex-wrap: wrap; gap: var(--s3); }
+.note-state-actions button { min-height: 40px; }
 .note-metadata > .tk-popover > button { text-align: left; padding: 0; font-weight: 400; color: var(--muted); white-space: normal; }
 .note-metadata .tk-popover-panel { color: var(--text); width: min(420px, 75vw); }
 .note-page .note-work-area { display: block; }
