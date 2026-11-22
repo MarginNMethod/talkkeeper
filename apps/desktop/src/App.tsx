@@ -1,6 +1,6 @@
 import { EmptyState, Row } from "@talkkeeper/ui";
 import { Modal } from "./Modal";
-import { NotePage, NoteHeader, AskBar, NoteLoadState } from "./NotePage";
+import { NotePage, NoteHeader, AskBar, NoteLoadState, type NoteSaveStatus } from "./NotePage";
 import { RecordingConsent } from "./RecordingConsent";
 import { Sidebar, type View } from "./Sidebar";
 import { TopBar } from "./TopBar";
@@ -260,6 +260,28 @@ export function App() {
     saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     saveQueue = useRef(Promise.resolve()),
     selectReqRef = useRef(0);
+  const [failedDrafts, setFailedDrafts] = useState<Record<string, Note>>({}),
+    [saveStatuses, setSaveStatuses] = useState<Record<string, NoteSaveStatus>>({}),
+    [showAllFailed, setShowAllFailed] = useState(false);
+  const failedDraftsRef = useRef<Record<string, Note>>({}),
+    saveStatusesRef = useRef<Record<string, NoteSaveStatus>>({}),
+    failedAt = useRef<Record<string, number>>({}),
+    saveSeqByNoteRef = useRef<Record<string, number>>({}),
+    savedTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({}),
+    retryFocusRef = useRef<string | null>(null), focusTitleRef = useRef<string | null>(null);
+  const lockedRef = useRef<Record<string, true>>({}), [locked, setLocked] = useState<Record<string, true>>({});
+  function lock(id: string, on: boolean) { const { [id]: _l, ...rest } = lockedRef.current; lockedRef.current = on ? { ...rest, [id]: true } : rest; setLocked(lockedRef.current); }
+  // The only client note write: refused while that note's Trash or Delete forever is in flight.
+  const writeNote = (n: Note) => (lockedRef.current[n.id] ? Promise.resolve("refused") : data("update", n));
+  const bumpSeq = (id: string) => (saveSeqByNoteRef.current[id] = (saveSeqByNoteRef.current[id] ?? 0) + 1);
+  function setDraft(id: string, draft: Note | null) {
+    const { [id]: _old, ...rest } = failedDraftsRef.current;
+    failedDraftsRef.current = draft ? { ...rest, [id]: draft } : rest;
+    if (draft) failedAt.current[id] = Date.now();
+    setFailedDrafts(failedDraftsRef.current);
+  }
+  function setSaveStatus(id: string, next: NoteSaveStatus) { clearTimeout(savedTimersRef.current[id]); saveStatusesRef.current[id] = next; setSaveStatuses((s) => ({ ...s, [id]: next })); }
+  function forget(id: string) { bumpSeq(id); setDraft(id, null); setSaveStatus(id, "idle"); }
   const [noteLoad, setNoteLoad] = useState<{
     status: "idle" | "loading" | "error";
     note: Note | null;
@@ -270,10 +292,20 @@ export function App() {
       ? (note?.id ?? null)
       : null;
   const fail = (e: unknown) => setError(String(e));
+  const activeNoteId = view.kind === "note" ? (note?.id ?? noteLoad.note?.id ?? null) : null;
+  const offScreenFailed = Object.values(failedDrafts).filter((d) => d.id !== activeNoteId);
   const recordError = recordErrors[note?.id ?? ""] ?? "";
   const setRecordError = (text: string, id = current.current?.id ?? "") =>
     setRecordErrors((errors) => ({ ...errors, [id]: text }));
-  async function refresh() { setNotes((await data<Note[]>(trash ? "trash" : "list")) ?? []); }
+  async function refresh() {
+    const list = (await data<Note[]>(trash ? "trash" : "list")) ?? [];
+    setNotes(trash ? list : list.map((n) => failedDraftsRef.current[n.id] ?? n));
+  }
+  useEffect(() => {
+    if (focusTitleRef.current && visibleNote.current === focusTitleRef.current) {
+      focusTitleRef.current = null; document.querySelector<HTMLElement>(".note-header .title")?.focus();
+    } else if (view.kind !== "note") focusTitleRef.current = null;
+  }, [view.kind, note, failedDrafts]);
   useEffect(() => {
     void refresh().catch(fail);
   }, [trash]);
@@ -406,12 +438,34 @@ export function App() {
     };
   }, []);
   function persist(n: Note) {
+    if (lockedRef.current[n.id]) return saveQueue.current;
+    const seq = saveSeqByNoteRef.current[n.id] ?? 0;
+    const stale = () => seq !== (saveSeqByNoteRef.current[n.id] ?? 0);
+    setSaveStatus(n.id, "saving");
     saveQueue.current = saveQueue.current
-      .then(async () => {
-        await data("update", n);
-      })
-      .catch(fail);
+      .then(() => writeNote(n))
+      .then(
+        (result) => {
+          if (stale()) return;
+          if (result === "refused") return setSaveStatus(n.id, failedDraftsRef.current[n.id] ? "failed" : "idle");
+          if (retryFocusRef.current === n.id) { retryFocusRef.current = null; if (visibleNote.current === n.id) focusTitleRef.current = n.id; }
+          setDraft(n.id, null); setSaveStatus(n.id, "saved");
+          savedTimersRef.current[n.id] = setTimeout(() => setSaveStatus(n.id, "idle"), 2200);
+        },
+        () => {
+          if (stale()) return;
+          if (retryFocusRef.current === n.id) retryFocusRef.current = null;
+          setDraft(n.id, n); setSaveStatus(n.id, "failed");
+        },
+      );
     return saveQueue.current;
+  }
+  function cancelTimer(id: string) { if (current.current?.id === id && saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; } }
+  function retrySave(id: string) {
+    const draft = current.current?.id === id ? current.current : failedDraftsRef.current[id];
+    if (!draft || saveStatusesRef.current[id] === "saving" || lockedRef.current[id]) return;
+    cancelTimer(id); bumpSeq(id); retryFocusRef.current = id;
+    void persist(draft);
   }
   async function flush() {
     if (saveTimer.current) {
@@ -423,13 +477,15 @@ export function App() {
   }
   function update(patch: Partial<Note>) {
     const n = current.current;
-    if (!n) return;
+    if (!n || lockedRef.current[n.id]) return;
     const next = { ...n, ...patch };
     current.current = next;
     setNote(next);
     setNotes((notes) =>
       notes.map((existing) => (existing.id === next.id ? next : existing)),
     );
+    bumpSeq(next.id);
+    if (saveStatusesRef.current[next.id] === "saved") setSaveStatus(next.id, "idle");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null;
@@ -459,6 +515,8 @@ export function App() {
     }
     if (reqId !== selectReqRef.current) return;
     setNoteLoad({ status: "idle", note: null });
+    if (!n.deleted_at && failedDraftsRef.current[n.id]) n = failedDraftsRef.current[n.id];
+    else setSaveStatus(n.id, "idle");
     setNote(n);
     setTemplate(n.template_id ?? "auto");
     setSegments(lines);
@@ -488,11 +546,11 @@ export function App() {
     const n = await data<Note>("start_note", {});
     if (view.kind === "space" && view.folder) {
       n.folder_id = view.folder;
-      await data("update", n);
+      await writeNote(n);
     }
     if (firstRun || n.title === "Untitled conversation") {
       n.title = "Untitled meeting";
-      await data("update", n);
+      await writeNote(n);
       setFirstRunNote(n.id);
     }
     setSetupChoice(true);
@@ -701,10 +759,21 @@ export function App() {
     setPendingAction("stop");
   }
   async function mutate(action: string, id = note?.id) {
-    if (!id) return;
+    if (!id || (action === "delete" && saveStatusesRef.current[id] === "saving")) return;
+    const removing = action === "delete" || action === "purge";
+    const pending = removing && saveTimer.current && current.current?.id === id ? current.current : null;
+    if (removing) { lock(id, true); cancelTimer(id); }
     selectReqRef.current++;
     await flush();
-    await data(action, { id });
+    try {
+      await data(action, { id });
+    } catch (e) {
+      if (!removing) throw e;
+      lock(id, false);
+      if (pending) void persist(pending);
+      return setError(action === "delete" ? "Couldn't move this note to Trash. It's still here, and your edits are kept." : "Couldn't delete this note forever. It's still in Trash.");
+    }
+    if (removing) { forget(id); lock(id, false); }
     setNote(null);
     setNoteLoad({ status: "idle", note: null });
     setView({kind: trash ? "trash" : "home"});
@@ -816,6 +885,41 @@ export function App() {
               <button onClick={() => setError("")}>Dismiss</button>
             </div>
           )}
+          {offScreenFailed.length > 0 && (
+            <section className="workspace-save-alerts" aria-label="Unsaved changes">
+              <h2 className="workspace-save-alerts-heading">
+                <span role="alert">
+                  {offScreenFailed.length === 1 ? "1 note couldn't be saved" : `${offScreenFailed.length} notes couldn't be saved`}
+                </span>
+              </h2>
+              <p>Drafts are kept until you close Talkkeeper.</p>
+              <ul>
+                {(showAllFailed ? offScreenFailed : offScreenFailed.slice(0, 3)).map((d) => {
+                  const name = d.title.trim() || "Untitled note";
+                  const same = offScreenFailed.filter((o) => (o.title.trim() || "Untitled note") === name);
+                  const excerpt = d.notes_markdown.trim().slice(0, 40);
+                  const unique = same.filter((o) => o.notes_markdown.trim().slice(0, 40) === excerpt).length < 2;
+                  const label = same.length > 1 && (!excerpt || !unique) ? `${name} (${same.indexOf(d) + 1})` : name;
+                  const folder = folders.find((f) => f.id === d.folder_id)?.name;
+                  const time = new Date(failedAt.current[d.id]).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+                  return (
+                    <li key={d.id}>
+                      <div className="workspace-save-alerts-text">
+                        <strong>{label}</strong>
+                        <small>{[folder, `Edited ${time}`, same.length > 1 && unique ? excerpt : ""].filter(Boolean).join(" · ")}</small>
+                      </div>
+                      <button className="workspace-save-alerts-open" aria-label={`Open note: ${label}`} onClick={() => void select(d).then(refresh).catch(fail)}>Open note</button>
+                    </li>
+                  );
+                })}
+              </ul>
+              {offScreenFailed.length > 3 && (
+                <button className="workspace-save-alerts-toggle" onClick={() => setShowAllFailed((v) => !v)}>
+                  {showAllFailed ? "Show fewer" : `Show all ${offScreenFailed.length} unsaved notes`}
+                </button>
+              )}
+            </section>
+          )}
           {progress && <p role="status">{progress}</p>}
           {setup.justCompleted &&
             status === "stopped" &&
@@ -919,7 +1023,7 @@ export function App() {
                     ...n,
                     attendees: [{ name: p.name, email: p.email }],
                   };
-                  await data("update", next);
+                  await writeNote(next);
                   await select(next);
                   await refresh();
                 })().catch(fail)
@@ -943,7 +1047,7 @@ export function App() {
               key={note.id}
               note={note}
               segments={segments}
-              readOnly={enhancing || trash}
+              readOnly={enhancing || trash || !!locked[note.id]}
               writing={enhancing || setup.writingNote === note.id}
               update={update}
               onError={fail}
@@ -1053,6 +1157,10 @@ export function App() {
                   onRestore={() => void mutate("restore").catch(fail)}
                   onTrash={() => void mutate("delete").catch(fail)}
                   onPurge={() => setPendingAction({ purge: note.id })}
+                  saveStatus={saveStatuses[note.id] ?? "idle"}
+                  failed={!!failedDrafts[note.id]}
+                  onRetrySave={() => retrySave(note.id)}
+                  deleting={!!locked[note.id]}
                   onOpen={(id) =>
                     void flush()
                       .then(async () => {

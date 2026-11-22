@@ -51,6 +51,15 @@ const hasSlowNote = harnessParams.has("slowNote");
 const slowNoteId = harnessParams.get("slowNote") ?? "";
 let noteFailsPending = harnessParams.has("noteFails");
 let saveFailsPending = harnessParams.has("saveFails");
+const saveFailsAlways = harnessParams.get("saveFails") === "always";
+let saveAllowed = false;
+window.addEventListener("mock:allow-save", () => { saveAllowed = true; });
+const slowSave = harnessParams.has("slowSave");
+const heldSaves: [() => void, (e: Error) => void][] = [];
+const slowDelete = harnessParams.has("slowDelete"), deleteFails = harnessParams.has("deleteFails"), heldDeletes: (() => void)[] = [];
+window.addEventListener("mock:resolve-delete", () => { for (const resolve of heldDeletes.splice(0)) resolve(); });
+window.addEventListener("mock:resolve-save", () => { for (const [resolve] of heldSaves.splice(0)) resolve(); });
+window.addEventListener("mock:reject-save", () => { for (const [, reject] of heldSaves.splice(0)) reject(new Error("Simulated save failure")); });
 const noteReleaseQueue: (() => void)[] = [];
 window.addEventListener("mock:release-note", () => {
   for (const release of noteReleaseQueue.splice(0)) release();
@@ -559,6 +568,8 @@ mockIPC(async (command, args) => {
       case "trash":
         return structuredClone(notes.filter(n => n.deleted_at));
       case "delete":
+        if (slowDelete) await new Promise<void>((resolve) => heldDeletes.push(resolve));
+        if (deleteFails) throw new Error("Simulated delete failure");
         notes = notes.map(n => n.id === p.id ? {...n, deleted_at: new Date().toISOString()} : n);
         return null;
       case "restore":
@@ -626,7 +637,9 @@ mockIPC(async (command, args) => {
         return structuredClone(n);
       }
       case "update":
-        if (saveFailsPending) {
+        if (slowSave) await new Promise<void>((resolve, reject) => heldSaves.push([resolve, reject]));
+        if (saveFailsAlways && !saveAllowed) throw new Error("Simulated save failure");
+        if (saveFailsPending && !saveFailsAlways) {
           saveFailsPending = false;
           throw new Error("Simulated save failure");
         }

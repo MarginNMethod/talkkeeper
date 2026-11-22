@@ -1028,3 +1028,28 @@ button { border-radius: var(--radius-sm); }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 @media(max-width: 700px) { .setup-welcome { padding: 24px; } .agenda-page article { grid-template-columns: 100px minmax(0, 1fr); } .agenda-page article > button { grid-column: 2; grid-row: auto; justify-self: start; } .tk-row-actions { flex-wrap: wrap; } .revision-diff { grid-template-columns: 1fr; } }
 @media(prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+/* Save status and save failures (TK-002): quiet when it works, plain and at the top when it doesn't. */
+.note-save-status { min-width: 4.5rem; font-size: var(--text-xs); color: var(--muted); }
+.note-save-status[data-status="saved"] { animation: note-save-fade var(--motion-normal) ease-out 2000ms forwards; }
+@keyframes note-save-fade { to { opacity: 0; } }
+.note-save-error { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); margin: calc(-1 * var(--s5)) 0 var(--s5); padding: var(--s2) var(--s3); border: 1px solid var(--danger); border-inline-start-width: 4px; border-radius: var(--radius-sm); background: var(--danger-tint); }
+.note-save-error p { flex: 1 1 260px; margin: 0; font-size: var(--text-sm); font-weight: 500; color: var(--danger); }
+.note-save-error button, .workspace-save-alerts button { min-height: 40px; padding: 8px 12px; font-size: var(--text-sm); font-weight: 500; }
+.note-save-retry, .workspace-save-alerts-open, .workspace-save-alerts-toggle { background: var(--panel); border-color: var(--border-strong); color: var(--text); }
+.workspace-save-alerts { margin-top: var(--s4); padding: var(--s3) var(--s4); border: 1px solid var(--danger); border-inline-start-width: 4px; border-radius: var(--radius-md); background: var(--danger-tint); }
+.workspace-save-alerts-heading { margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--danger); }
+.workspace-save-alerts-heading [role="alert"] { padding: 0; background: none; }
+.workspace-save-alerts > p { margin: var(--s1) 0 var(--s2); font-size: var(--text-xs); color: var(--muted); }
+.workspace-save-alerts ul { margin: 0 0 var(--s2); padding: 0; list-style: none; }
+.workspace-save-alerts li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s2) 0; border-top: 1px solid var(--border-strong); }
+.workspace-save-alerts-text { display: grid; flex: 1 1 240px; min-width: 0; }
+.workspace-save-alerts-text strong { overflow: hidden; font-size: var(--text-sm); font-weight: 500; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
+.workspace-save-alerts-text small { font-size: var(--text-xs); color: var(--muted); }
+@media (max-width: 600px) {
+  .workspace-save-alerts { padding: var(--s3); }
+  .workspace-save-alerts-text { flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .note-save-status[data-status="saved"] { animation-duration: 0s; } }
+.note-header > .tk-popover > .tk-popover-panel { inset-inline-start: auto; inset-inline-end: 0; }
+.note-header > .tk-popover > .tk-popover-panel > button { min-height: 40px; }
