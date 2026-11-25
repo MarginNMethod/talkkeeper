@@ -158,6 +158,8 @@ export function NoteLoadState({
   );
 }
 
+export type NoteSaveStatus = "idle" | "saving" | "saved" | "failed";
+
 export function NoteHeader({
   note,
   folders,
@@ -170,6 +172,10 @@ export function NoteHeader({
   onTrash,
   onPurge,
   onOpen,
+  saveStatus = "idle",
+  failed = false,
+  onRetrySave,
+  deleting = false,
 }: {
   note: Note;
   folders: { id: string; name: string }[];
@@ -182,6 +188,10 @@ export function NoteHeader({
   onTrash: () => void;
   onPurge: () => void;
   onOpen: (id: string) => void;
+  saveStatus?: NoteSaveStatus;
+  failed?: boolean;
+  onRetrySave?: () => void;
+  deleting?: boolean;
 }) {
   const folderName =
     folders.find((folder) => folder.id === note.folder_id)?.name ?? "No folder";
@@ -193,7 +203,7 @@ export function NoteHeader({
           rows={1}
           aria-label="Note title"
           value={note.title}
-          readOnly={!!note.deleted_at}
+          readOnly={!!note.deleted_at || deleting}
           onChange={(event) => update({ title: event.target.value })}
         />
         <Popover label="More actions for this note">
@@ -217,7 +227,7 @@ export function NoteHeader({
             </>
           ) : (
             <button
-              disabled={recording}
+              disabled={recording || saveStatus === "saving" || deleting}
               title={
                 recording
                   ? "Stop the recording before moving this note to the trash."
@@ -235,7 +245,7 @@ export function NoteHeader({
           label={`${new Date(note.created_at).toLocaleString()} · ${note.attendees.length ? note.attendees.map((person) => person.name).join(", ") : "Add people"} · ${folderName}`}
           closeOnAction={false}
         >
-          <fieldset disabled={!!note.deleted_at}>
+          <fieldset disabled={!!note.deleted_at || deleting}>
             <Attendees
               key={note.id}
               value={note.attendees}
@@ -260,7 +270,16 @@ export function NoteHeader({
             </label>
           </fieldset>
         </Popover>
+        <span className="note-save-status" role="status" aria-live="polite" data-status={saveStatus}>
+          {saveStatus === "saving" ? "Saving…" : saveStatus === "saved" ? "Saved" : ""}
+        </span>
       </div>
+      {failed && (
+        <div className="note-save-error" role="alert" key={note.id}>
+          <p>Changes couldn't be saved. Your draft is kept until you close Talkkeeper.</p>
+          <button type="button" className="note-save-retry" disabled={saveStatus === "saving" || deleting} onClick={onRetrySave}>Retry save</button>
+        </div>
+      )}
     </>
   );
 }
