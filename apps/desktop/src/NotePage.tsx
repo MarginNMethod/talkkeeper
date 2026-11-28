@@ -174,7 +174,9 @@ export function NoteHeader({
   onOpen,
   saveStatus = "idle",
   failed = false,
+  undoFailed = false,
   onRetrySave,
+  onDiscardDraft,
   deleting = false,
 }: {
   note: Note;
@@ -190,7 +192,9 @@ export function NoteHeader({
   onOpen: (id: string) => void;
   saveStatus?: NoteSaveStatus;
   failed?: boolean;
+  undoFailed?: boolean;
   onRetrySave?: () => void;
+  onDiscardDraft?: () => void;
   deleting?: boolean;
 }) {
   const folderName =
@@ -231,7 +235,7 @@ export function NoteHeader({
               title={
                 recording
                   ? "Stop the recording before moving this note to the trash."
-                  : undefined
+                  : deleting ? undefined : saveStatus === "saving" ? "Wait for changes to finish saving before moving this note to Trash." : undefined
               }
               onClick={onTrash}
             >
@@ -276,8 +280,9 @@ export function NoteHeader({
       </div>
       {failed && (
         <div className="note-save-error" role="alert" key={note.id}>
-          <p>Changes couldn't be saved. Your draft is kept until you close Talkkeeper.</p>
+          <p>{undoFailed ? "Couldn't restore the earlier version. Your latest edits are already saved." : "Changes couldn't be saved. Your draft is kept until you close Talkkeeper."}</p>
           <button type="button" className="note-save-retry" disabled={saveStatus === "saving" || deleting} onClick={onRetrySave}>Retry save</button>
+          <button type="button" className="note-save-discard" disabled={deleting} onClick={onDiscardDraft}>Discard</button>
         </div>
       )}
     </>

@@ -35,6 +35,9 @@ import { Chat } from "./Chat";
 import { CopyTranscript } from "./CopyTranscript";
 import { SnapshotControls } from "./Snapshots";
 import { RecordBar, RecordingElsewhere } from "./RecordBar";
+const USER = ["title", "notes_doc", "notes_markdown", "folder_id", "attendees"] as const; type User = (typeof USER)[number];
+const pick = (n?: Note) => n && (Object.fromEntries(USER.map((k) => [k, n[k]])) as Pick<Note, User>);
+const cut = (s: string) => { const t = s.replace(/\s+/g, " ").trim(), h = t.slice(0, 40), i = h.lastIndexOf(" "); return t.length <= 40 ? t : h.slice(0, i > 16 ? i : 40).replace(/[.,;:!?\s]+$/, "") + "\u2026"; };
 export function App() {
   const [notes, setNotes] = useState<Note[]>([]),
     [note, setNote] = useState<Note | null>(null),
@@ -270,18 +273,44 @@ export function App() {
     savedTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({}),
     retryFocusRef = useRef<string | null>(null), focusTitleRef = useRef<string | null>(null);
   const lockedRef = useRef<Record<string, true>>({}), [locked, setLocked] = useState<Record<string, true>>({});
-  function lock(id: string, on: boolean) { const { [id]: _l, ...rest } = lockedRef.current; lockedRef.current = on ? { ...rest, [id]: true } : rest; setLocked(lockedRef.current); }
-  // The only client note write: refused while that note's Trash or Delete forever is in flight.
-  const writeNote = (n: Note) => (lockedRef.current[n.id] ? Promise.resolve("refused") : data("update", n));
+  function lock(id: string, on: boolean) { if (on) { delete lostRef.current[id]; delete heldRef.current[id]; } const { [id]: _l, ...rest } = lockedRef.current; lockedRef.current = on ? { ...rest, [id]: true } : rest; setLocked(lockedRef.current); }
+  const lastSavedRef = useRef<Record<string, Note>>({}), owedRef = useRef<Record<string, true>>({}), lostRef = useRef<Record<string, Note>>({}), [resetKey, setResetKey] = useState<Record<string, number>>({});
+  const undoRef = useRef<Record<string, true>>({}), [undoFailed, setUndoFailed] = useState<Record<string, true>>({}), heldRef = useRef<Record<string, Note>>({});
+  function markUndo(id: string, on: boolean) { const { [id]: _u, ...r } = undoRef.current; undoRef.current = on ? { ...r, [id]: true } : r; if (on) failedAt.current[id] = Date.now(); setUndoFailed(undoRef.current); }
+  // The only client note-update IPC call: edits, Retry save, and the Discard write-back (why="rollback"). Server-side note commands (enhance_note, apply_revision, restore_summary, delete_segments, calendar_link) never pass here; their App triggers are disabled while the note is locked.
+  const writeNote = (n: Note, why?: "rollback") => (lockedRef.current[n.id] && why !== "rollback" ? Promise.resolve("refused") : data("update", n));
+  function settleTo(id: string) {
+    const run = saveQueue.current.then(async () => {
+      const fresh = await data<Note>("get", { id });
+      if (!fresh) throw new Error("Note not found");
+      const target = owedRef.current[id] ? { ...fresh, ...pick(lastSavedRef.current[id]) } : fresh;
+      if (owedRef.current[id] && USER.some((k) => JSON.stringify(fresh[k]) !== JSON.stringify(target[k]))) await writeNote(target, "rollback");
+      delete owedRef.current[id];
+      return (lastSavedRef.current[id] = target);
+    });
+    saveQueue.current = run.then(() => {}, () => {});
+    return run;
+  }
   const bumpSeq = (id: string) => (saveSeqByNoteRef.current[id] = (saveSeqByNoteRef.current[id] ?? 0) + 1);
   function setDraft(id: string, draft: Note | null) {
+    markUndo(id, false);
     const { [id]: _old, ...rest } = failedDraftsRef.current;
     failedDraftsRef.current = draft ? { ...rest, [id]: draft } : rest;
     if (draft) failedAt.current[id] = Date.now();
     setFailedDrafts(failedDraftsRef.current);
   }
   function setSaveStatus(id: string, next: NoteSaveStatus) { clearTimeout(savedTimersRef.current[id]); saveStatusesRef.current[id] = next; setSaveStatuses((s) => ({ ...s, [id]: next })); }
-  function forget(id: string) { bumpSeq(id); setDraft(id, null); setSaveStatus(id, "idle"); }
+  function forget(id: string) { bumpSeq(id); setDraft(id, null); setSaveStatus(id, "idle"); delete owedRef.current[id]; delete lastSavedRef.current[id]; }
+  async function discardDraft(id: string) {
+    if (lockedRef.current[id]) return;
+    const typed = saveTimer.current && current.current?.id === id ? current.current : null; // unsaved typing still in the debounce: kept if Discard fails
+    lock(id, true); bumpSeq(id); cancelTimer(id);
+    try {
+      const target = await settleTo(id);
+      setDraft(id, null); setSaveStatus(id, "idle"); setNotes((ns) => ns.map((x) => (x.id === id ? target : x)));
+      if (current.current?.id === id) { current.current = target; setNote(target); setResetKey((k) => ({ ...k, [id]: (k[id] ?? 0) + 1 })); focusTitleRef.current = id; }
+    } catch { const lost = typed ?? lostRef.current[id], held = heldRef.current[id]; if (lost || held) setDraft(id, (lost ?? held)!); if (!lost && owedRef.current[id]) markUndo(id, true); setSaveStatus(id, "failed"); } finally { lock(id, false); }
+  }
   const [noteLoad, setNoteLoad] = useState<{
     status: "idle" | "loading" | "error";
     note: Note | null;
@@ -294,11 +323,13 @@ export function App() {
   const fail = (e: unknown) => setError(String(e));
   const activeNoteId = view.kind === "note" ? (note?.id ?? noteLoad.note?.id ?? null) : null;
   const offScreenFailed = Object.values(failedDrafts).filter((d) => d.id !== activeNoteId);
+  const undoN = offScreenFailed.filter((d) => undoFailed[d.id]).length, saveN = offScreenFailed.length - undoN;
   const recordError = recordErrors[note?.id ?? ""] ?? "";
   const setRecordError = (text: string, id = current.current?.id ?? "") =>
     setRecordErrors((errors) => ({ ...errors, [id]: text }));
   async function refresh() {
     const list = (await data<Note[]>(trash ? "trash" : "list")) ?? [];
+    if (!trash) for (const n of list) if (!lockedRef.current[n.id] && saveStatusesRef.current[n.id] !== "saving" && !owedRef.current[n.id]) lastSavedRef.current[n.id] = n;
     setNotes(trash ? list : list.map((n) => failedDraftsRef.current[n.id] ?? n));
   }
   useEffect(() => {
@@ -446,6 +477,9 @@ export function App() {
       .then(() => writeNote(n))
       .then(
         (result) => {
+          if (result === "refused") { if (lockedRef.current[n.id]) lostRef.current[n.id] = n; } // refused under a Discard lock: lost unless a later write lands
+          else if (lockedRef.current[n.id]) { owedRef.current[n.id] = true; heldRef.current[n.id] = n; delete lostRef.current[n.id]; } // landed under the lock: owe a write-back
+          else { lastSavedRef.current[n.id] = n; delete owedRef.current[n.id]; } // landed unlocked: the restore point
           if (stale()) return;
           if (result === "refused") return setSaveStatus(n.id, failedDraftsRef.current[n.id] ? "failed" : "idle");
           if (retryFocusRef.current === n.id) { retryFocusRef.current = null; if (visibleNote.current === n.id) focusTitleRef.current = n.id; }
@@ -453,6 +487,7 @@ export function App() {
           savedTimersRef.current[n.id] = setTimeout(() => setSaveStatus(n.id, "idle"), 2200);
         },
         () => {
+          if (lockedRef.current[n.id]) lostRef.current[n.id] = n;
           if (stale()) return;
           if (retryFocusRef.current === n.id) retryFocusRef.current = null;
           setDraft(n.id, n); setSaveStatus(n.id, "failed");
@@ -495,7 +530,7 @@ export function App() {
   }
 
   async function select(n: Note) {
-    const reqId = ++selectReqRef.current;
+    const reqId = ++selectReqRef.current, wasDraft = failedDraftsRef.current[n.id] === n;
     setSettings(null);
     const pendingFlush = flush();
     setView({ kind: "note" });
@@ -516,7 +551,7 @@ export function App() {
     if (reqId !== selectReqRef.current) return;
     setNoteLoad({ status: "idle", note: null });
     if (!n.deleted_at && failedDraftsRef.current[n.id]) n = failedDraftsRef.current[n.id];
-    else setSaveStatus(n.id, "idle");
+    else { if (wasDraft) n = lastSavedRef.current[n.id] ?? n; setSaveStatus(n.id, "idle"); if (!owedRef.current[n.id] && !lockedRef.current[n.id]) lastSavedRef.current[n.id] = n; }
     setNote(n);
     setTemplate(n.template_id ?? "auto");
     setSegments(lines);
@@ -558,7 +593,7 @@ export function App() {
     await refresh();
   }
   async function enhance() {
-    if (!note) return;
+    if (!note || lockedRef.current[note.id]) return;
     if (!setup.aiReady) {
       setProgress(
         setup.status?.ai === "skipped"
@@ -759,25 +794,32 @@ export function App() {
     setPendingAction("stop");
   }
   async function mutate(action: string, id = note?.id) {
-    if (!id || (action === "delete" && saveStatusesRef.current[id] === "saving")) return;
+    if (!id || lockedRef.current[id] || (action === "delete" && saveStatusesRef.current[id] === "saving")) return;
     const removing = action === "delete" || action === "purge";
     const pending = removing && saveTimer.current && current.current?.id === id ? current.current : null;
     if (removing) { lock(id, true); cancelTimer(id); }
     selectReqRef.current++;
-    await flush();
+    let done = false;
     try {
+      await flush();
       await data(action, { id });
+      done = true;
     } catch (e) {
       if (!removing) throw e;
-      lock(id, false);
-      if (pending) void persist(pending);
-      return setError(action === "delete" ? "Couldn't move this note to Trash. It's still here, and your edits are kept." : "Couldn't delete this note forever. It's still in Trash.");
+    } finally {
+      if (removing) { if (done) forget(id); lock(id, false); }
     }
-    if (removing) { forget(id); lock(id, false); }
-    setNote(null);
-    setNoteLoad({ status: "idle", note: null });
-    setView({kind: trash ? "trash" : "home"});
-    setSegments([]);
+    if (!done) {
+      const F8 = "Couldn't move this note to Trash. It's still here, and your draft is kept until you close Talkkeeper.";
+      if (pending) void persist(pending).then(() => { if (failedDraftsRef.current[id]) setError((e) => (e.endsWith("your edits are kept.") ? F8 : e)); });
+      return setError(action === "purge" ? "Couldn't delete this note forever. It's still in Trash." : failedDraftsRef.current[id] && !undoRef.current[id] ? F8 : "Couldn't move this note to Trash. It's still here, and your edits are kept.");
+    }
+    if (!removing || visibleNote.current === id) {
+      setNote(null);
+      setNoteLoad({ status: "idle", note: null });
+      setView({kind: trash ? "trash" : "home"});
+      setSegments([]);
+    }
     await refresh();
   }
   return (
@@ -889,16 +931,16 @@ export function App() {
             <section className="workspace-save-alerts" aria-label="Unsaved changes">
               <h2 className="workspace-save-alerts-heading">
                 <span role="alert">
-                  {offScreenFailed.length === 1 ? "1 note couldn't be saved" : `${offScreenFailed.length} notes couldn't be saved`}
+                  {saveN === 0 ? (undoN === 1 ? "1 note couldn't discard changes" : `${undoN} notes couldn't discard changes`) : undoN > 0 ? `${offScreenFailed.length} notes need attention` : offScreenFailed.length === 1 ? "1 note couldn't be saved" : `${offScreenFailed.length} notes couldn't be saved`}
                 </span>
               </h2>
-              <p>Drafts are kept until you close Talkkeeper.</p>
+              <p>{saveN === 0 ? "Your latest edits are already saved. Open a note or try Discard again." : undoN > 0 ? "Unsaved drafts are kept until you close Talkkeeper. Notes that couldn't discard already have their latest edits saved." : "Drafts are kept until you close Talkkeeper."}</p>
               <ul>
                 {(showAllFailed ? offScreenFailed : offScreenFailed.slice(0, 3)).map((d) => {
                   const name = d.title.trim() || "Untitled note";
                   const same = offScreenFailed.filter((o) => (o.title.trim() || "Untitled note") === name);
-                  const excerpt = d.notes_markdown.trim().slice(0, 40);
-                  const unique = same.filter((o) => o.notes_markdown.trim().slice(0, 40) === excerpt).length < 2;
+                  const excerpt = cut(d.notes_markdown);
+                  const unique = same.filter((o) => cut(o.notes_markdown) === excerpt).length < 2;
                   const label = same.length > 1 && (!excerpt || !unique) ? `${name} (${same.indexOf(d) + 1})` : name;
                   const folder = folders.find((f) => f.id === d.folder_id)?.name;
                   const time = new Date(failedAt.current[d.id]).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -906,16 +948,17 @@ export function App() {
                     <li key={d.id}>
                       <div className="workspace-save-alerts-text">
                         <strong>{label}</strong>
-                        <small>{[folder, `Edited ${time}`, same.length > 1 && unique ? excerpt : ""].filter(Boolean).join(" · ")}</small>
+                        <small>{[folder, undoFailed[d.id] ? `Changes saved · Undo failed ${time}` : `Edited ${time}`, same.length > 1 && unique ? excerpt : ""].filter(Boolean).join(" · ")}</small>
                       </div>
                       <button className="workspace-save-alerts-open" aria-label={`Open note: ${label}`} onClick={() => void select(d).then(refresh).catch(fail)}>Open note</button>
+                      <button className="workspace-save-alerts-discard" aria-label={undoFailed[d.id] ? `Discard changes: ${label}` : `Discard unsaved changes: ${label}`} disabled={!!locked[d.id]} onClick={() => void discardDraft(d.id)}>Discard</button>
                     </li>
                   );
                 })}
               </ul>
               {offScreenFailed.length > 3 && (
                 <button className="workspace-save-alerts-toggle" onClick={() => setShowAllFailed((v) => !v)}>
-                  {showAllFailed ? "Show fewer" : `Show all ${offScreenFailed.length} unsaved notes`}
+                  {showAllFailed ? "Show fewer" : `Show all ${offScreenFailed.length} ${undoN > 0 ? "notes" : "unsaved notes"}`}
                 </button>
               )}
             </section>
@@ -1036,7 +1079,7 @@ export function App() {
                 Notes here can be restored. Nothing is deleted until you choose
                 "Delete forever".
               </p>
-              {!notes.length && <EmptyState title="Trash is empty." />}{notes.map(n => <Row key={n.id} title={<button className="note-row-link" onClick={() => void select(n).catch(fail)}>{n.title}</button>} actions={<><button className="quiet" onClick={() => void data("restore", {id:n.id}).then(refresh).catch(fail)}>Restore</button><button className="quiet" onClick={() => setPendingAction({ purge: n.id })}>Delete forever</button></>} />)}
+              {!notes.length && <EmptyState title="Trash is empty." />}{notes.map(n => <Row key={n.id} title={<button className="note-row-link" onClick={() => void select(n).catch(fail)}>{n.title}</button>} actions={<><button className="quiet" disabled={!!locked[n.id]} onClick={() => lockedRef.current[n.id] || void data("restore", {id:n.id}).then(refresh).catch(fail)}>Restore</button><button className="quiet" onClick={() => setPendingAction({ purge: n.id })}>Delete forever</button></>} />)}
             </section>
           ) : view.kind === "home" ? (
             <Home notes={notes} captureNote={captureNote} durations={durations} onOpen={n => void select(n).then(refresh).catch(fail)} onError={fail} onSettings={() => void navigate({kind:"settings"})} onAsk={question => { void navigate({kind:"chat"}, question).catch(fail); }} />
@@ -1044,7 +1087,7 @@ export function App() {
             <SpacePage captureNote={captureNote} durations={durations} name={folders.find(f => f.id === view.folder)?.name ?? "All notes"} notes={notes.filter(n => !view.folder || n.folder_id === view.folder)} onOpen={n => void select(n).catch(fail)} />
           ) : view.kind === "note" && note ? (
             <NotePage
-              key={note.id}
+              key={`${note.id}:${resetKey[note.id] ?? 0}`}
               note={note}
               segments={segments}
               readOnly={enhancing || trash || !!locked[note.id]}
@@ -1151,7 +1194,7 @@ export function App() {
                   folders={folders}
                   update={update}
                   recording={captureNote === note.id}
-                  canEnhance={setup.aiReady && !enhancing && !trash}
+                  canEnhance={setup.aiReady && !enhancing && !trash && !locked[note.id]}
                   onEnhance={() => void enhance()}
                   onExport={(format, copy) => void exportNote(format, copy).catch(fail)}
                   onRestore={() => void mutate("restore").catch(fail)}
@@ -1159,7 +1202,9 @@ export function App() {
                   onPurge={() => setPendingAction({ purge: note.id })}
                   saveStatus={saveStatuses[note.id] ?? "idle"}
                   failed={!!failedDrafts[note.id]}
+                  undoFailed={!!undoFailed[note.id]}
                   onRetrySave={() => retrySave(note.id)}
+                  onDiscardDraft={() => void discardDraft(note.id)}
                   deleting={!!locked[note.id]}
                   onOpen={(id) =>
                     void flush()
@@ -1202,7 +1247,7 @@ export function App() {
                   )}
                   <div className="summary-tools">
                     <button
-                      disabled={!setup.aiReady || enhancing || trash}
+                      disabled={!setup.aiReady || enhancing || trash || !!locked[note.id]}
                       onClick={() => void enhance()}
                     >
                       {enhancing ? "Writing…" : "Write up my notes"}
@@ -1256,7 +1301,7 @@ export function App() {
                   onRecord={() => void capture("start_capture")}
                   segments={segments}
                   onDelete={(ids) =>
-                    void data("delete_segments", { id: note.id, ids })
+                    lockedRef.current[note.id] || void data("delete_segments", { id: note.id, ids })
                       .then(() =>
                         setSegments((s) => s.filter((x) => !ids.includes(x.id))),
                       )
@@ -1277,10 +1322,10 @@ export function App() {
                             .catch(fail)
                         }
                         key={note.id}
-                        locked={enhancing}
+                        locked={enhancing || !!locked[note.id]}
                         note={note}
                         segments={segments}
-                        beforeRequest={flush}
+                        beforeRequest={() => (lockedRef.current[note.id] ? Promise.reject(new Error("This note is being moved to Trash.")) : flush())}
                         onNote={(n) => {
                           if (current.current?.id !== n.id) return;
                           current.current = n;

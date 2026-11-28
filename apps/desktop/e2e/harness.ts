@@ -576,6 +576,7 @@ mockIPC(async (command, args) => {
         notes = notes.map(n => n.id === p.id ? {...n, deleted_at: null} : n);
         return null;
       case "purge":
+        if (slowDelete) await new Promise<void>((resolve) => heldDeletes.push(resolve));
         notes = notes.filter(n => n.id !== p.id);
         return null;
       case "templates":

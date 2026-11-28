@@ -1045,7 +1045,11 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .workspace-save-alerts li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s2) 0; border-top: 1px solid var(--border-strong); }
 .workspace-save-alerts-text { display: grid; flex: 1 1 240px; min-width: 0; }
 .workspace-save-alerts-text strong { overflow: hidden; font-size: var(--text-sm); font-weight: 500; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
-.workspace-save-alerts-text small { font-size: var(--text-xs); color: var(--muted); }
+.workspace-save-alerts-text small { overflow: hidden; font-size: var(--text-xs); color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.note-save-discard, .workspace-save-alerts-discard { background: transparent; border-color: transparent; color: var(--danger); }
+.note-save-discard:not(:disabled):is(:hover, :active), .workspace-save-alerts-discard:not(:disabled):is(:hover, :active) { background: var(--panel); border-color: var(--danger); }
+.workspace > [role="alert"] > button { min-height: 40px; }
+.note-header .tk-popover-panel .tk-button:focus-visible { outline-width: 3px; }
 @media (max-width: 600px) {
   .workspace-save-alerts { padding: var(--s3); }
   .workspace-save-alerts-text { flex-basis: 100%; }
